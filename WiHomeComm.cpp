@@ -14,6 +14,28 @@ WiHomeComm::WiHomeComm() // setup object with desired intervall
   etp_Wifi = new EnoughTimePassed(10000);
 }
 
+byte WiHomeComm::status()
+{
+  // 4: SoftAP mode, 3: WiFi not connected, 2: WiFi connected but hub not found,
+  // 1: WiFi connected and hub found, 0: unknown problem
+  if (WiFi.getMode()==WIFI_STA)
+  {
+    if (WiFi.status()==WL_CONNECTED)
+    {
+      if (hub_discovered)
+        return 1;
+      else
+        return 2;
+    }
+    else
+      return 3;
+  }
+  else if (WiFi.getMode()==WIFI_AP)
+    return 4;
+  else
+    return 0;
+}
+
 
 JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
 {
@@ -91,6 +113,7 @@ bool WiHomeComm::ConnectStation()
     findhub();
     return true;
   }
+  hub_discovered = false;
   return false;
 }
 
@@ -99,6 +122,7 @@ void WiHomeComm::ConnectSoftAP()
 {
   if (WiFi.status()!=WL_DISCONNECTED || WiFi.getMode()!=WIFI_AP)
   {
+    hub_discovered = false;
     Serial.printf("Going to SoftAP mode:\n");
     WiFi.softAPdisconnect(true);
     if (WiFi.isConnected())
@@ -199,10 +223,8 @@ void WiHomeComm::handleRoot()
   html += html_config_form2;
   html += password;
   html += html_config_form3;
-  html += "NA";
-  html += html_config_form4;
   html += client;
-  html += html_config_form5;
+  html += html_config_form4;
   webserver->send(200, "text/html", html);
 }
 
@@ -326,6 +348,7 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
       {
         Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
         hubip = Udp.remoteIP();
+        hub_discovered = true;
         return JsonObject::invalid();
       }
     }

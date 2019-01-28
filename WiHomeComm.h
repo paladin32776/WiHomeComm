@@ -18,11 +18,10 @@
 #define WIHOMECOMM_MAX_CONNECT_COUNT 2
 #define WIHOMECOMM_FINDHUB_INTERVAL 60000 //ms
 
-const char html_config_form1[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Configuration</h2><form action='/save_and_restart.php' style='font-family:verdana;'>  SSID:<br>  <input type='text' name='ssid' value='"};
+const char html_config_form1[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>  SSID:<br>  <input type='text' name='ssid' value='"};
 const char html_config_form2[] = {"'>  <br>  Password:<br>  <input type='text' name='password' value='"};
-const char html_config_form3[] = {"'>  <br>  MQTT Broker:<br>  <input type='text' name='mqtt_broker' value='"};
-const char html_config_form4[] = {"'>  <br>  Client Name:<br>  <input type='text' name='client' value='"};
-const char html_config_form5[] = {"'>  <br><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
+const char html_config_form3[] = {"'>  <br>  Client Name:<br>  <input type='text' name='client' value='"};
+const char html_config_form4[] = {"'>  <br><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
 class WiHomeComm
 {
@@ -47,6 +46,7 @@ class WiHomeComm
     char incomingPacket[255];
     IPAddress hubip;
     EnoughTimePassed* etp_findhub;
+    bool hub_discovered = false;
     // Settings for WiFi persistence
     EnoughTimePassed* etp_Wifi;
     bool needMDNS = true;
@@ -66,6 +66,7 @@ class WiHomeComm
     JsonObject& serve_packet(DynamicJsonBuffer* jsonBuffer);
   public:
     WiHomeComm();  // setup object with desired intervall
+    byte status(); // get connection status
     JsonObject& check(DynamicJsonBuffer* jsonBuffer);
     void send(JsonObject& root);
     bool softAPmode = false;
