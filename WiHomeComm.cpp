@@ -4,7 +4,7 @@
 
 #include "WiHomeComm.h"
 
-WiHomeComm::WiHomeComm() // setup object with desired intervall
+WiHomeComm::WiHomeComm() // setup WiHomeComm object
 {
   LoadUserData();
   strcpy(ssid_softAP, "WiHome_SoftAP");
