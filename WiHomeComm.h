@@ -15,7 +15,8 @@
 #ifndef WIHOMECOMM_H
 #define WIHOMECOMM_H
 
-#define WIHOMECOMM_MAX_CONNECT_COUNT 2
+#define WIHOMECOMM_RECONNECT_INTERVAL 10000
+#define WIHOMECOMM_MAX_CONNECT_COUNT 0
 #define WIHOMECOMM_FINDHUB_INTERVAL 60000 //ms
 
 const char html_config_form1[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>  SSID:<br>  <input type='text' name='ssid' value='"};

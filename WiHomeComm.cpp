@@ -11,7 +11,7 @@ WiHomeComm::WiHomeComm() // setup WiHomeComm object
   hubip = IPAddress(0,0,0,0);
   Serial.printf("WiHomeComm initializing ...\nUser data loaded from NVM:\n");
   Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
-  etp_Wifi = new EnoughTimePassed(10000);
+  etp_Wifi = new EnoughTimePassed(WIHOMECOMM_RECONNECT_INTERVAL);
 }
 
 byte WiHomeComm::status()
@@ -61,7 +61,7 @@ bool WiHomeComm::ConnectStation()
     {
       connect_count++;
       Serial.printf("Connection attempt #%d.\n",connect_count);
-      if (connect_count>WIHOMECOMM_MAX_CONNECT_COUNT)
+      if ((connect_count>WIHOMECOMM_MAX_CONNECT_COUNT) && (WIHOMECOMM_MAX_CONNECT_COUNT>0))
       {
         Serial.printf("Maximum number of connection attempts reached - rebooting!\n");
         delay(1000);
