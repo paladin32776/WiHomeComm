@@ -274,7 +274,7 @@ void WiHomeComm::findhub()
 {
   if (etp_findhub->enough_time())
   {
-    Serial.printf("\nBroadcast findhub message.\n");
+    // Serial.printf("\nBroadcast findhub message.\n");
     IPAddress broadcastip = WiFi.localIP();
     broadcastip[3] = 255;
     DynamicJsonBuffer jsonBuffer;
@@ -293,12 +293,12 @@ void WiHomeComm::serve_findclient()
   int packetSize = Udp_discovery.parsePacket();
   if (packetSize)
   {
-    Serial.printf("\n[DISCOVERY ATTEMPT]\nReceived %d bytes from %s, port %d\n", packetSize,
-                  Udp_discovery.remoteIP().toString().c_str(), Udp_discovery.remotePort());
+    // Serial.printf("\n[DISCOVERY ATTEMPT]\nReceived %d bytes from %s, port %d\n", packetSize,
+    //               Udp_discovery.remoteIP().toString().c_str(), Udp_discovery.remotePort());
     int len = Udp_discovery.read(incomingPacket, 255);
     if (len > 0)
       incomingPacket[len] = 0;
-    Serial.printf("UDP packet contents: %s\n", incomingPacket);
+    //Serial.printf("UDP packet contents: %s\n", incomingPacket);
     DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.parseObject(incomingPacket);
     if (!root.success())
@@ -307,14 +307,17 @@ void WiHomeComm::serve_findclient()
     }
     else
     {
-      if (root["cmd"]=="findclient")
+      if (root.containsKey("cmd") && root.containsKey("client"))
       {
-        if (strcmp(root["client"],client)==0)
+        if (root["cmd"]=="findclient")
         {
-          root["cmd"] = "clientid";
-          Udp.beginPacket(Udp_discovery.remoteIP(), localUdpPort);
-          root.printTo(Udp);
-          Udp.endPacket();
+          if (strcmp(root["client"],client)==0)
+          {
+            root["cmd"] = "clientid";
+            Udp.beginPacket(Udp_discovery.remoteIP(), localUdpPort);
+            root.printTo(Udp);
+            Udp.endPacket();
+          }
         }
       }
     }
@@ -327,14 +330,14 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
   int packetSize = Udp.parsePacket();
   if (packetSize)
   {
-    Serial.printf("\nReceived %d bytes from %s, port %d\n", packetSize,
-                  Udp.remoteIP().toString().c_str(), Udp.remotePort());
+    // Serial.printf("\nReceived %d bytes from %s, port %d\n", packetSize,
+    //               Udp.remoteIP().toString().c_str(), Udp.remotePort());
     int len = Udp.read(incomingPacket, 255);
     if (len > 0)
     {
       incomingPacket[len] = 0;
     }
-    Serial.printf("UDP packet contents: %s\n", incomingPacket);
+    // Serial.printf("UDP packet contents: %s\n", incomingPacket);
 
     JsonObject& root = jsonBuffer->parseObject(incomingPacket);
     // Test if parsing succeeds.
@@ -344,12 +347,15 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
     }
     else
     {
-      if (root["cmd"]=="hubid")
+      if (root.containsKey("cmd"))
       {
-        Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
-        hubip = Udp.remoteIP();
-        hub_discovered = true;
-        return JsonObject::invalid();
+        if (root["cmd"]=="hubid")
+        {
+          // Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
+          hubip = Udp.remoteIP();
+          hub_discovered = true;
+          return JsonObject::invalid();
+        }
       }
     }
     return root;

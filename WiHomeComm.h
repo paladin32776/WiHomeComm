@@ -65,12 +65,34 @@ class WiHomeComm
     void findhub();
     void serve_findclient();
     JsonObject& serve_packet(DynamicJsonBuffer* jsonBuffer);
+    // Template functions to assemble JSON object from variable number of input parameters:
+    template<typename Tparameter, typename Tvalue>
+    void assembleJSON(JsonObject& root, Tparameter parameter, Tvalue value)
+    {
+      root[parameter]=value;
+    }
+    template<typename Tparameter, typename Tvalue, typename... Args>
+    void assembleJSON(JsonObject& root, Tparameter parameter, Tvalue value, Args... args)
+    {
+      root[parameter]=value;
+      assembleJSON(root, args...);
+    }
   public:
     WiHomeComm();  // setup object with desired intervall
     byte status(); // get connection status
     JsonObject& check(DynamicJsonBuffer* jsonBuffer);
     void send(JsonObject& root);
     bool softAPmode = false;
+    // Template functions to send variable number of input parameters as JSON object:
+    template<typename... Args>
+    bool sendJSON(Args... args)
+    {
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& root = jsonBuffer.createObject();
+        assembleJSON(root, args...);
+        //root.printTo(Serial);
+        send(root);
+    }
 };
 
 #endif // WIHOMECOMM_H
