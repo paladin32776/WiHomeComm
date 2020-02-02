@@ -48,6 +48,7 @@ class WiHomeComm
     IPAddress hubip;
     EnoughTimePassed* etp_findhub;
     bool hub_discovered = false;
+    bool wihome_protocol = true;
     // Settings for WiFi persistence
     EnoughTimePassed* etp_Wifi;
     bool needMDNS = true;
@@ -77,8 +78,10 @@ class WiHomeComm
       root[parameter]=value;
       assembleJSON(root, args...);
     }
+    void init(bool _wihome_protocol);
   public:
-    WiHomeComm();  // setup object with desired intervall
+    WiHomeComm();
+    WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
     byte status(); // get connection status
     JsonObject& check(DynamicJsonBuffer* jsonBuffer);
     void send(JsonObject& root);
