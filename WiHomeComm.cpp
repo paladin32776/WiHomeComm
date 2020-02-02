@@ -6,6 +6,17 @@
 
 WiHomeComm::WiHomeComm() // setup WiHomeComm object
 {
+  init(true);
+}
+
+WiHomeComm::WiHomeComm(bool _wihome_protocol) // setup WiHomeComm object
+{
+  init(_wihome_protocol);
+}
+
+void WiHomeComm::init(bool _wihome_protocol)
+{
+  wihome_protocol = _wihome_protocol;
   LoadUserData();
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
@@ -22,7 +33,7 @@ byte WiHomeComm::status()
   {
     if (WiFi.status()==WL_CONNECTED)
     {
-      if (hub_discovered)
+      if (hub_discovered || !wihome_protocol)
         return 1;
       else
         return 2;
@@ -41,7 +52,7 @@ JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
 {
   if (softAPmode==false)
   {
-    if (ConnectStation())
+    if (ConnectStation() && wihome_protocol)
     {
       JsonObject& root = serve_packet(jsonBuffer);
       return root;
@@ -71,11 +82,14 @@ bool WiHomeComm::ConnectStation()
       WiFi.softAPdisconnect(true);
       if (WiFi.isConnected())
         WiFi.disconnect();
-      Udp.stop();
-      Udp_discovery.stop();
-      if (etp_findhub)
-        delete etp_findhub;
-      Serial.println("UDP services stopped.");
+      if (wihome_protocol)
+      {
+        Udp.stop();
+        Udp_discovery.stop();
+        if (etp_findhub)
+          delete etp_findhub;
+        Serial.println("UDP services stopped.");
+      }
       while (WiFi.status()==WL_CONNECTED)
         delay(50);
       Serial.printf("Connecting to %s\n",ssid);
@@ -99,18 +113,24 @@ bool WiHomeComm::ConnectStation()
       ArduinoOTA.setHostname(client);
       ArduinoOTA.begin();
       Serial.println("OTA service started.");
-      Udp.begin(localUdpPort);
-      Udp_discovery.begin(discoveryUdpPort);
-      etp_findhub = new EnoughTimePassed(WIHOMECOMM_FINDHUB_INTERVAL);
-      Serial.println("UDP services created.");
+      if (wihome_protocol)
+      {
+        Udp.begin(localUdpPort);
+        Udp_discovery.begin(discoveryUdpPort);
+        etp_findhub = new EnoughTimePassed(WIHOMECOMM_FINDHUB_INTERVAL);
+        Serial.println("UDP services created.");
+      }
     }
   }
   if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && !needMDNS)
   {
     connect_count = 0;
     ArduinoOTA.handle();
-    serve_findclient();
-    findhub();
+    if (wihome_protocol)
+    {
+      serve_findclient();
+      findhub();
+    }
     return true;
   }
   hub_discovered = false;
@@ -272,7 +292,7 @@ void WiHomeComm::handleClient()
 
 void WiHomeComm::findhub()
 {
-  if (etp_findhub->enough_time())
+  if (etp_findhub->enough_time() && wihome_protocol)
   {
     // Serial.printf("\nBroadcast findhub message.\n");
     IPAddress broadcastip = WiFi.localIP();
@@ -290,8 +310,10 @@ void WiHomeComm::findhub()
 
 void WiHomeComm::serve_findclient()
 {
-  int packetSize = Udp_discovery.parsePacket();
-  if (packetSize)
+  int packetSize;
+  if (wihome_protocol)
+    packetSize = Udp_discovery.parsePacket();
+  if (packetSize && wihome_protocol)
   {
     // Serial.printf("\n[DISCOVERY ATTEMPT]\nReceived %d bytes from %s, port %d\n", packetSize,
     //               Udp_discovery.remoteIP().toString().c_str(), Udp_discovery.remotePort());
@@ -327,8 +349,10 @@ void WiHomeComm::serve_findclient()
 
 JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
 {
-  int packetSize = Udp.parsePacket();
-  if (packetSize)
+  int packetSize;
+  if (wihome_protocol)
+    packetSize = Udp.parsePacket();
+  if (packetSize && wihome_protocol)
   {
     // Serial.printf("\nReceived %d bytes from %s, port %d\n", packetSize,
     //               Udp.remoteIP().toString().c_str(), Udp.remotePort());
@@ -367,7 +391,7 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
 
 void WiHomeComm::send(JsonObject& root)
 {
-  if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && !needMDNS)
+  if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && !needMDNS && wihome_protocol)
   {
     root["client"]=client;
     Udp.beginPacket(hubip, localUdpPort);
