@@ -83,6 +83,7 @@ class WiHomeComm
     WiHomeComm();
     WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
     byte status(); // get connection status
+    void check();
     JsonObject& check(DynamicJsonBuffer* jsonBuffer);
     void send(JsonObject& root);
     bool softAPmode = false;

@@ -48,6 +48,13 @@ byte WiHomeComm::status()
 }
 
 
+void WiHomeComm::check()
+{
+  DynamicJsonBuffer jsonBuffer;
+  JsonObject& root = check(&jsonBuffer);
+}
+
+
 JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
 {
   if (softAPmode==false)
