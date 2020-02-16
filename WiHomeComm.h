@@ -11,6 +11,7 @@
 #include "EnoughTimePassed.h"
 #include <EEPROM.h>
 #include <ArduinoJson.h>
+#include "SignalLED.h"
 
 #ifndef WIHOMECOMM_H
 #define WIHOMECOMM_H
@@ -52,6 +53,11 @@ class WiHomeComm
     // Settings for WiFi persistence
     EnoughTimePassed* etp_Wifi;
     bool needMDNS = true;
+    // Status led:
+    SignalLED* status_led;
+    int handle_status_led = 0;
+    unsigned int* led_status;
+    SignalLED* relay;
     // Methods:
     bool ConnectStation();
     void ConnectSoftAP();
@@ -79,9 +85,13 @@ class WiHomeComm
       assembleJSON(root, args...);
     }
     void init(bool _wihome_protocol);
+    void check_status_led();
   public:
     WiHomeComm();
     WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
+    void set_status_led(SignalLED* _status_led);
+    void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
+    void set_status_led(SignalLED* _status_led, SignalLED* _relay);
     byte status(); // get connection status
     void check();
     JsonObject& check(DynamicJsonBuffer* jsonBuffer);

@@ -48,6 +48,55 @@ byte WiHomeComm::status()
 }
 
 
+void WiHomeComm::set_status_led(SignalLED* _status_led)
+{
+  status_led = _status_led;
+  handle_status_led = 1;
+}
+
+
+void WiHomeComm::set_status_led(SignalLED* _status_led, unsigned int* _led_status)
+{
+  status_led = _status_led;
+  led_status = _led_status;
+  handle_status_led = 2;
+}
+
+
+void WiHomeComm::set_status_led(SignalLED* _status_led, SignalLED* _relay)
+{
+  status_led = _status_led;
+  relay = _relay;
+  handle_status_led = 3;
+}
+
+
+void WiHomeComm::check_status_led()
+{
+  if (handle_status_led)
+  {
+    // Logic for LED status display:
+    if (status()==1)
+    {
+      if (handle_status_led==1)
+        status_led->set(SLED_OFF);
+      else if (handle_status_led==2)
+        status_led->set(*led_status);
+      else if (handle_status_led==3)
+        status_led->set(relay->get());
+    }
+    else if (status()==2)
+      status_led->set(SLED_BLINK_FAST_3);
+    else if (status()==3)
+      status_led->set(SLED_BLINK_FAST_1);
+    else if (status()==4)
+      status_led->set(SLED_BLINK_SLOW);
+    else
+      status_led->set(SLED_BLINK_FAST);
+  }
+}
+
+
 void WiHomeComm::check()
 {
   DynamicJsonBuffer jsonBuffer;
@@ -57,6 +106,7 @@ void WiHomeComm::check()
 
 JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
 {
+  check_status_led();
   if (softAPmode==false)
   {
     if (ConnectStation() && wihome_protocol)
