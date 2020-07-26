@@ -47,13 +47,11 @@ byte WiHomeComm::status()
     return 0;
 }
 
-
 void WiHomeComm::set_status_led(SignalLED* _status_led)
 {
   status_led = _status_led;
   handle_status_led = 1;
 }
-
 
 void WiHomeComm::set_status_led(SignalLED* _status_led, unsigned int* _led_status)
 {
@@ -62,14 +60,12 @@ void WiHomeComm::set_status_led(SignalLED* _status_led, unsigned int* _led_statu
   handle_status_led = 2;
 }
 
-
 void WiHomeComm::set_status_led(SignalLED* _status_led, SignalLED* _relay)
 {
   status_led = _status_led;
   relay = _relay;
   handle_status_led = 3;
 }
-
 
 void WiHomeComm::check_status_led()
 {
@@ -96,13 +92,11 @@ void WiHomeComm::check_status_led()
   }
 }
 
-
 void WiHomeComm::check()
 {
   DynamicJsonBuffer jsonBuffer;
   JsonObject& root = check(&jsonBuffer);
 }
-
 
 JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
 {
@@ -119,7 +113,6 @@ JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
     ConnectSoftAP();
   return JsonObject::invalid();
 }
-
 
 bool WiHomeComm::ConnectStation()
 {
@@ -142,7 +135,6 @@ bool WiHomeComm::ConnectStation()
       if (wihome_protocol)
       {
         Udp.stop();
-        Udp_discovery.stop();
         if (etp_findhub)
           delete etp_findhub;
         Serial.println("UDP services stopped.");
@@ -173,7 +165,6 @@ bool WiHomeComm::ConnectStation()
       if (wihome_protocol)
       {
         Udp.begin(localUdpPort);
-        Udp_discovery.begin(discoveryUdpPort);
         etp_findhub = new EnoughTimePassed(WIHOMECOMM_FINDHUB_INTERVAL);
         Serial.println("UDP services created.");
       }
@@ -184,16 +175,12 @@ bool WiHomeComm::ConnectStation()
     connect_count = 0;
     ArduinoOTA.handle();
     if (wihome_protocol)
-    {
-      serve_findclient();
       findhub();
-    }
     return true;
   }
   hub_discovered = false;
   return false;
 }
-
 
 void WiHomeComm::ConnectSoftAP()
 {
@@ -231,7 +218,6 @@ void WiHomeComm::ConnectSoftAP()
 
 }
 
-
 bool WiHomeComm::LoadUserData()
 {
   EEPROM.begin(97);
@@ -248,7 +234,6 @@ bool WiHomeComm::LoadUserData()
   return true;
 }
 
-
 void WiHomeComm::SaveUserData()
 {
   EEPROM.begin(97);
@@ -260,7 +245,6 @@ void WiHomeComm::SaveUserData()
   EEPROM.end();
   delay(100);
 }
-
 
 void WiHomeComm::CreateConfigWebServer(int port)
 {
@@ -276,7 +260,6 @@ void WiHomeComm::CreateConfigWebServer(int port)
   Serial.println("HTTP server started.");
 }
 
-
 void WiHomeComm::DestroyConfigWebServer()
 {
   if(webserver)
@@ -291,7 +274,6 @@ void WiHomeComm::DestroyConfigWebServer()
   }
 }
 
-
 void WiHomeComm::handleRoot()
 {
   LoadUserData();
@@ -304,7 +286,6 @@ void WiHomeComm::handleRoot()
   html += html_config_form4;
   webserver->send(200, "text/html", html);
 }
-
 
 void WiHomeComm::handleSaveAndRestart()
 {
@@ -340,7 +321,6 @@ void WiHomeComm::handleSaveAndRestart()
   softAPmode = false;
 }
 
-
 void WiHomeComm::handleClient()
 {
   dnsServer->processNextRequest();
@@ -352,57 +332,20 @@ void WiHomeComm::findhub()
   if (etp_findhub->enough_time() && wihome_protocol)
   {
     // Serial.printf("\nBroadcast findhub message.\n");
-    IPAddress broadcastip = WiFi.localIP();
-    broadcastip[3] = 255;
+    IPAddress ip = WiFi.localIP();
+    IPAddress subnetmask = WiFi.subnetMask();
+    IPAddress broadcast_ip(0,0,0,0);
+    for (int n=0; n<4; n++)
+      broadcast_ip[n] = (ip[n] & subnetmask[n]) | ~subnetmask[n];
     DynamicJsonBuffer jsonBuffer;
     JsonObject& root = jsonBuffer.createObject();
     root["cmd"]="findhub";
     root["client"]=client;
-    Udp.beginPacket(broadcastip, localUdpPort);
+    Udp.beginPacket(broadcast_ip, localUdpPort);
     root.printTo(Udp);
     Udp.endPacket();
   }
 }
-
-
-void WiHomeComm::serve_findclient()
-{
-  int packetSize;
-  if (wihome_protocol)
-    packetSize = Udp_discovery.parsePacket();
-  if (packetSize && wihome_protocol)
-  {
-    // Serial.printf("\n[DISCOVERY ATTEMPT]\nReceived %d bytes from %s, port %d\n", packetSize,
-    //               Udp_discovery.remoteIP().toString().c_str(), Udp_discovery.remotePort());
-    int len = Udp_discovery.read(incomingPacket, 255);
-    if (len > 0)
-      incomingPacket[len] = 0;
-    //Serial.printf("UDP packet contents: %s\n", incomingPacket);
-    DynamicJsonBuffer jsonBuffer;
-    JsonObject& root = jsonBuffer.parseObject(incomingPacket);
-    if (!root.success())
-    {
-      Serial.println("parseObject() failed");
-    }
-    else
-    {
-      if (root.containsKey("cmd") && root.containsKey("client"))
-      {
-        if (root["cmd"]=="findclient")
-        {
-          if (strcmp(root["client"],client)==0)
-          {
-            root["cmd"] = "clientid";
-            Udp.beginPacket(Udp_discovery.remoteIP(), localUdpPort);
-            root.printTo(Udp);
-            Udp.endPacket();
-          }
-        }
-      }
-    }
-  }
-}
-
 
 JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
 {
@@ -415,9 +358,7 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
     //               Udp.remoteIP().toString().c_str(), Udp.remotePort());
     int len = Udp.read(incomingPacket, 255);
     if (len > 0)
-    {
       incomingPacket[len] = 0;
-    }
     // Serial.printf("UDP packet contents: %s\n", incomingPacket);
 
     JsonObject& root = jsonBuffer->parseObject(incomingPacket);
@@ -430,6 +371,19 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
     {
       if (root.containsKey("cmd"))
       {
+        if (root["cmd"]=="findclient" && root.containsKey("client"))
+        {
+          if (strcmp(root["client"],client)==0)
+          {
+            root["cmd"] = "clientid";
+            Udp.beginPacket(Udp.remoteIP(), localUdpPort);
+            root.printTo(Udp);
+            Udp.endPacket();
+            hubip = Udp.remoteIP();
+            hub_discovered = true;
+            return JsonObject::invalid();
+          }
+        }
         if (root["cmd"]=="hubid")
         {
           // Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
@@ -444,7 +398,6 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
   else
     return JsonObject::invalid();
 }
-
 
 void WiHomeComm::send(JsonObject& root)
 {

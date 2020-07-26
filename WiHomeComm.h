@@ -42,9 +42,8 @@ class WiHomeComm
     DNSServer* dnsServer;
     const byte DNS_PORT = 53;
     // WiHome UDP communication configuration
-    WiFiUDP Udp,Udp_discovery;
+    WiFiUDP Udp;
     unsigned int localUdpPort = 24557;
-    unsigned int discoveryUdpPort = 24558;
     char incomingPacket[255];
     IPAddress hubip;
     EnoughTimePassed* etp_findhub;
@@ -70,7 +69,6 @@ class WiHomeComm
     void handleSaveAndRestart();
     void handleClient();
     void findhub();
-    void serve_findclient();
     JsonObject& serve_packet(DynamicJsonBuffer* jsonBuffer);
     // Template functions to assemble JSON object from variable number of input parameters:
     template<typename Tparameter, typename Tvalue>
