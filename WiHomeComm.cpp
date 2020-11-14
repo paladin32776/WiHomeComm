@@ -17,6 +17,7 @@ WiHomeComm::WiHomeComm(bool _wihome_protocol) // setup WiHomeComm object
 void WiHomeComm::init(bool _wihome_protocol)
 {
   wihome_protocol = _wihome_protocol;
+  jnvm = new Json_NVM(NVM_Offset_UserData, 512);
   LoadUserData();
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
@@ -94,24 +95,20 @@ void WiHomeComm::check_status_led()
 
 void WiHomeComm::check()
 {
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject& root = check(&jsonBuffer);
+  DynamicJsonDocument doc(128);
+  check(doc);
 }
 
-JsonObject& WiHomeComm::check(DynamicJsonBuffer* jsonBuffer)
+void WiHomeComm::check(DynamicJsonDocument& doc)
 {
   check_status_led();
   if (softAPmode==false)
   {
     if (ConnectStation() && wihome_protocol)
-    {
-      JsonObject& root = serve_packet(jsonBuffer);
-      return root;
-    }
+      serve_packet(doc);
   }
   else
     ConnectSoftAP();
-  return JsonObject::invalid();
 }
 
 bool WiHomeComm::ConnectStation()
@@ -220,30 +217,23 @@ void WiHomeComm::ConnectSoftAP()
 
 bool WiHomeComm::LoadUserData()
 {
-  EEPROM.begin(97);
-  strcpy(ssid, "");
-  strcpy(password, "");
-  strcpy(client, "");
-  EEPROM.get(NVM_Offset_UserData, ud_id);
-  if (ud_id != valid_ud_id)
-    return false;
-  EEPROM.get(NVM_Offset_UserData+1,ssid);
-  EEPROM.get(NVM_Offset_UserData+33,password);
-  EEPROM.get(NVM_Offset_UserData+65,client);
-  EEPROM.end();
-  return true;
+  DynamicJsonDocument doc(1024);
+  bool valid = jnvm->readJSON(doc);
+  if (valid)
+  {
+    String s_ssid = doc["ssid"];
+    String s_password = doc["password"];
+    String s_client = doc["client"];
+    strcpy(ssid, s_ssid.c_str());
+    strcpy(password, s_password.c_str());
+    strcpy(client, s_client.c_str());
+  }
+  return valid;
 }
 
 void WiHomeComm::SaveUserData()
 {
-  EEPROM.begin(97);
-  EEPROM.put(NVM_Offset_UserData+1,ssid);
-  EEPROM.put(NVM_Offset_UserData+33,password);
-  EEPROM.put(NVM_Offset_UserData+65,client);
-  ud_id = valid_ud_id;
-  EEPROM.write(NVM_Offset_UserData, ud_id);
-  EEPROM.end();
-  delay(100);
+  jnvm->writeJSON("ssid", ssid, "password", password, "client", client);
 }
 
 void WiHomeComm::CreateConfigWebServer(int port)
@@ -337,17 +327,19 @@ void WiHomeComm::findhub()
     IPAddress broadcast_ip(0,0,0,0);
     for (int n=0; n<4; n++)
       broadcast_ip[n] = (ip[n] & subnetmask[n]) | ~subnetmask[n];
-    DynamicJsonBuffer jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
-    root["cmd"]="findhub";
-    root["client"]=client;
+    // DynamicJsonBuffer jsonBuffer;
+    // JsonObject& root = jsonBuffer.createObject();
+    DynamicJsonDocument doc(1024);
+    doc["cmd"]="findhub";
+    doc["client"]=client;
     Udp.beginPacket(broadcast_ip, localUdpPort);
-    root.printTo(Udp);
+    // root.printTo(Udp);
+    serializeJson(doc, Udp);
     Udp.endPacket();
   }
 }
 
-JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
+void WiHomeComm::serve_packet(DynamicJsonDocument& doc)
 {
   int packetSize;
   if (wihome_protocol)
@@ -361,51 +353,53 @@ JsonObject& WiHomeComm::serve_packet(DynamicJsonBuffer* jsonBuffer)
       incomingPacket[len] = 0;
     // Serial.printf("UDP packet contents: %s\n", incomingPacket);
 
-    JsonObject& root = jsonBuffer->parseObject(incomingPacket);
+    // JsonObject& root = jsonBuffer->parseObject(incomingPacket);
+    DeserializationError error = deserializeJson(doc, incomingPacket);
     // Test if parsing succeeds.
-    if (!root.success())
+    if (error)
     {
-      Serial.println("parseObject() failed");
+      Serial.println("deserializeJson() failed");
     }
     else
     {
-      if (root.containsKey("cmd"))
+      if (doc.containsKey("cmd"))
       {
-        if (root["cmd"]=="findclient" && root.containsKey("client"))
+        if (doc["cmd"]=="findclient" && doc.containsKey("client"))
         {
-          if (strcmp(root["client"],client)==0)
+          if (strcmp(doc["client"],client)==0)
           {
-            root["cmd"] = "clientid";
+            doc["cmd"] = "clientid";
             Udp.beginPacket(Udp.remoteIP(), localUdpPort);
-            root.printTo(Udp);
+            // root.printTo(Udp);
+            serializeJson(doc, Udp);
             Udp.endPacket();
             hubip = Udp.remoteIP();
             hub_discovered = true;
-            return JsonObject::invalid();
+            // return JsonObject::invalid();
           }
         }
-        if (root["cmd"]=="hubid")
+        if (doc["cmd"]=="hubid")
         {
           // Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
           hubip = Udp.remoteIP();
           hub_discovered = true;
-          return JsonObject::invalid();
+          // return JsonObject::invalid();
         }
       }
     }
-    return root;
+    // return root;
   }
-  else
-    return JsonObject::invalid();
+  // else
+  //   return JsonObject::invalid();
 }
 
-void WiHomeComm::send(JsonObject& root)
+void WiHomeComm::send(DynamicJsonDocument& doc)
 {
   if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && !needMDNS && wihome_protocol)
   {
-    root["client"]=client;
+    doc["client"]=client;
     Udp.beginPacket(hubip, localUdpPort);
-    root.printTo(Udp);
+    serializeJson(doc, Udp);
     Udp.endPacket();
   }
 }
