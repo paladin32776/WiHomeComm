@@ -30,7 +30,7 @@ class WiHomeComm
 {
   private:
     // UserData variables and configuration
-    unsigned int NVM_Offset_UserData = 0;
+    unsigned int NVM_Offset_UserData = 2048;
     byte valid_ud_id = 188;
     byte ud_id;
     char ssid[32];

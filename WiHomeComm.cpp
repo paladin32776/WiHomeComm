@@ -18,6 +18,7 @@ void WiHomeComm::init(bool _wihome_protocol)
 {
   wihome_protocol = _wihome_protocol;
   jnvm = new Json_NVM(NVM_Offset_UserData, 512);
+  jnvm->dump_NVM();
   LoadUserData();
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
@@ -234,6 +235,7 @@ bool WiHomeComm::LoadUserData()
 void WiHomeComm::SaveUserData()
 {
   jnvm->writeJSON("ssid", ssid, "password", password, "client", client);
+  jnvm->dump_NVM();
 }
 
 void WiHomeComm::CreateConfigWebServer(int port)
