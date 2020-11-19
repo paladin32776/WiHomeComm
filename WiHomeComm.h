@@ -13,6 +13,7 @@
 #include <ArduinoJson.h>
 #include "Json_NVM.h"
 #include "SignalLED.h"
+#include "NoBounceButtons.h"
 
 #ifndef WIHOMECOMM_H
 #define WIHOMECOMM_H
@@ -30,7 +31,7 @@ class WiHomeComm
 {
   private:
     // UserData variables and configuration
-    unsigned int NVM_Offset_UserData = 2048;
+    unsigned int NVM_Offset_UserData = 0;
     byte valid_ud_id = 188;
     byte ud_id;
     char ssid[32];
@@ -60,6 +61,11 @@ class WiHomeComm
     int handle_status_led = 0;
     unsigned int* led_status;
     SignalLED* relay;
+    // Storage for config button info:
+    NoBounceButtons* nbb;
+    unsigned char button;
+    unsigned char softAP_trigger;
+    bool handle_button = false;
     // Methods:
     bool ConnectStation();
     void ConnectSoftAP();
@@ -73,8 +79,9 @@ class WiHomeComm
     void handleClient();
     void findhub();
     void serve_packet(DynamicJsonDocument& doc);
-    void init(bool _wihome_protocol);
+    void init(bool _wihome_protocol, unsigned int _nvm_offset);
     void check_status_led();
+    void check_button();
     // Template functions to assemble JSON object from variable number of input parameters:
     template<typename Tparameter, typename Tvalue>
     void assembleJSON(DynamicJsonDocument& doc, Tparameter parameter, Tvalue value)
@@ -91,9 +98,13 @@ class WiHomeComm
   public:
     WiHomeComm();
     WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
+    WiHomeComm(unsigned int _nvm_offset);  // Optional ommission of wihome UDP communication funcitonality
+    WiHomeComm(bool _wihome_protocol, unsigned int _nvm_offset);  // Optional ommission of wihome UDP communication funcitonality
     void set_status_led(SignalLED* _status_led);
     void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
     void set_status_led(SignalLED* _status_led, SignalLED* _relay);
+    void set_button(NoBounceButtons* _nbb, unsigned char _button);
+    void set_button(NoBounceButtons* _nbb, unsigned char _button, unsigned char _softAP_trigger);
     byte status(); // get connection status
     void check();
     void check(DynamicJsonDocument& doc);

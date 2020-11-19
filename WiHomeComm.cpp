@@ -6,17 +6,28 @@
 
 WiHomeComm::WiHomeComm() // setup WiHomeComm object
 {
-  init(true);
+  init(true, 0);
 }
 
 WiHomeComm::WiHomeComm(bool _wihome_protocol) // setup WiHomeComm object
 {
-  init(_wihome_protocol);
+  init(_wihome_protocol, 0);
 }
 
-void WiHomeComm::init(bool _wihome_protocol)
+WiHomeComm::WiHomeComm(unsigned int _nvm_offset) // setup WiHomeComm object
+{
+  init(true, _nvm_offset);
+}
+
+WiHomeComm::WiHomeComm(bool _wihome_protocol, unsigned int _nvm_offset) // setup WiHomeComm object
+{
+  init(_wihome_protocol, _nvm_offset);
+}
+
+void WiHomeComm::init(bool _wihome_protocol, unsigned int _nvm_offset)
 {
   wihome_protocol = _wihome_protocol;
+  NVM_Offset_UserData = _nvm_offset;
   jnvm = new Json_NVM(NVM_Offset_UserData, 512);
   jnvm->dump_NVM();
   LoadUserData();
@@ -94,6 +105,36 @@ void WiHomeComm::check_status_led()
   }
 }
 
+void WiHomeComm::set_button(NoBounceButtons* _nbb, unsigned char _button)
+{
+  set_button(_nbb, _button, NBB_LONG_CLICK);
+}
+
+void WiHomeComm::set_button(NoBounceButtons* _nbb, unsigned char _button, unsigned char _softAP_trigger)
+{
+  nbb = _nbb;
+  button = _button;
+  softAP_trigger = _softAP_trigger;
+  handle_button = true;
+}
+
+void WiHomeComm::check_button()
+{
+  if (handle_button)
+  {
+    if ((softAPmode == false) && (nbb->action(button) == softAP_trigger))
+    {
+      softAPmode = true;
+      nbb->reset(button);
+    }
+    else if ((softAPmode == true) && (nbb->action(button) == NBB_CLICK))
+    {
+      softAPmode = false;
+      nbb->reset(button);
+    }
+  }
+}
+
 void WiHomeComm::check()
 {
   DynamicJsonDocument doc(128);
@@ -103,6 +144,7 @@ void WiHomeComm::check()
 void WiHomeComm::check(DynamicJsonDocument& doc)
 {
   check_status_led();
+  check_button();
   if (softAPmode==false)
   {
     if (ConnectStation() && wihome_protocol)
