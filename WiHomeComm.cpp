@@ -80,6 +80,13 @@ void WiHomeComm::set_status_led(SignalLED* _status_led, SignalLED* _relay)
   handle_status_led = 3;
 }
 
+void WiHomeComm::set_status_led(SignalLED* _status_led, RGBstrip* _rgbstrip)
+{
+  status_led = _status_led;
+  rgbstrip = _rgbstrip;
+  handle_status_led = 4;
+}
+
 void WiHomeComm::check_status_led()
 {
   if (handle_status_led)
@@ -93,6 +100,8 @@ void WiHomeComm::check_status_led()
         status_led->set(*led_status);
       else if (handle_status_led==3)
         status_led->set(relay->get());
+      else if (handle_status_led==4)
+        status_led->set(rgbstrip->get_on());
     }
     else if (status()==2)
       status_led->set(SLED_BLINK_FAST_3);

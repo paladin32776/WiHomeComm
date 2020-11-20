@@ -14,6 +14,7 @@
 #include "Json_NVM.h"
 #include "SignalLED.h"
 #include "NoBounceButtons.h"
+#include "RGBstrip.h"
 
 #ifndef WIHOMECOMM_H
 #define WIHOMECOMM_H
@@ -61,6 +62,7 @@ class WiHomeComm
     int handle_status_led = 0;
     unsigned int* led_status;
     SignalLED* relay;
+    RGBstrip* rgbstrip;
     // Storage for config button info:
     NoBounceButtons* nbb;
     unsigned char button;
@@ -103,6 +105,7 @@ class WiHomeComm
     void set_status_led(SignalLED* _status_led);
     void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
     void set_status_led(SignalLED* _status_led, SignalLED* _relay);
+    void set_status_led(SignalLED* _status_led, RGBstrip* _rgbstrip);
     void set_button(NoBounceButtons* _nbb, unsigned char _button);
     void set_button(NoBounceButtons* _nbb, unsigned char _button, unsigned char _softAP_trigger);
     byte status(); // get connection status
