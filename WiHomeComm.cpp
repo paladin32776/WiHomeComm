@@ -6,36 +6,22 @@
 
 WiHomeComm::WiHomeComm()//:config("wihome.cfg") // setup WiHomeComm object
 {
-  init(true, 0);
+  init(true);
 }
 
 WiHomeComm::WiHomeComm(bool _wihome_protocol)//:config("wihome.cfg") // setup WiHomeComm object
 {
-  init(_wihome_protocol, 0);
+  init(_wihome_protocol);
 }
 
-WiHomeComm::WiHomeComm(unsigned int _nvm_offset)//:config("wihome.cfg") // setup WiHomeComm object
-{
-  init(true, _nvm_offset);
-}
-
-WiHomeComm::WiHomeComm(bool _wihome_protocol, unsigned int _nvm_offset)//:config("wihome.cfg") // setup WiHomeComm object
-{
-  init(_wihome_protocol, _nvm_offset);
-}
-
-void WiHomeComm::init(bool _wihome_protocol, unsigned int _nvm_offset)
+void WiHomeComm::init(bool _wihome_protocol)
 {
   wihome_protocol = _wihome_protocol;
   config = new ConfigFileJSON("wihome.cfg");
-  config->dump();
-  // NVM_Offset_UserData = _nvm_offset;
-  // jnvm = new Json_NVM(NVM_Offset_UserData, 512);
-  // jnvm->dump_NVM();
   LoadUserData();
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
-  Serial.printf("WiHomeComm initializing ...\nUser data loaded from NVM:\n");
+  Serial.printf("WiHomeComm initializing ...\nUser data loaded from SPIFFS file:\n");
   Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
   etp_Wifi = new EnoughTimePassed(WIHOMECOMM_RECONNECT_INTERVAL);
 }
@@ -271,18 +257,6 @@ void WiHomeComm::ConnectSoftAP()
 
 bool WiHomeComm::LoadUserData()
 {
-  // DynamicJsonDocument doc(1024);
-  // bool valid = jnvm->readJSON(doc);
-  // if (valid)
-  // {
-  //   String s_ssid = doc["ssid"];
-  //   String s_password = doc["password"];
-  //   String s_client = doc["client"];
-  //   strcpy(ssid, s_ssid.c_str());
-  //   strcpy(password, s_password.c_str());
-  //   strcpy(client, s_client.c_str());
-  // }
-  // return valid;
   config->get("ssid", ssid, "password", password, "client", client);
 }
 
@@ -290,8 +264,6 @@ void WiHomeComm::SaveUserData()
 {
   config->set("ssid", ssid, "password", password, "client", client);
   config->dump();
-  // jnvm->writeJSON("ssid", ssid, "password", password, "client", client);
-  // jnvm->dump_NVM();
 }
 
 void WiHomeComm::CreateConfigWebServer(int port)

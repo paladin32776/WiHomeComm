@@ -84,7 +84,7 @@ class WiHomeComm
     void handleClient();
     void findhub();
     void serve_packet(DynamicJsonDocument& doc);
-    void init(bool _wihome_protocol, unsigned int _nvm_offset);
+    void init(bool _wihome_protocol);
     void check_status_led();
     void check_button();
     // Template functions to assemble JSON object from variable number of input parameters:
@@ -103,8 +103,6 @@ class WiHomeComm
   public:
     WiHomeComm();
     WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
-    WiHomeComm(unsigned int _nvm_offset);  // Optional ommission of wihome UDP communication funcitonality
-    WiHomeComm(bool _wihome_protocol, unsigned int _nvm_offset);  // Optional ommission of wihome UDP communication funcitonality
     void set_status_led(SignalLED* _status_led);
     void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
     void set_status_led(SignalLED* _status_led, SignalLED* _relay);
