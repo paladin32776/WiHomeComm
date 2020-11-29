@@ -1,5 +1,5 @@
 // WiHome Communications Class
-// Author: Gernot Fattinger (2019)
+// Author: Gernot Fattinger (2019-2020)
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266WebServer.h>
@@ -12,6 +12,7 @@
 #include <EEPROM.h>
 #include <ArduinoJson.h>
 #include "Json_NVM.h"
+#include "ConfigFileJSON.h"
 #include "SignalLED.h"
 #include "NoBounceButtons.h"
 #include "RGBstrip.h"
@@ -41,6 +42,8 @@ class WiHomeComm
     byte connect_count = 0;
     // NVM user data storage:
     Json_NVM* jnvm;
+    // ConfigFileJSON:
+    ConfigFileJSON* config;
     // SoftAP configuration
     char ssid_softAP[32];
     ESP8266WebServer* webserver;
