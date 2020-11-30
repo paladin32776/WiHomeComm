@@ -1,15 +1,15 @@
 // Class to handle Wifi communication
 // for WiHome devices
-// Author: Gernot Fattinger (2019)
+// Author: Gernot Fattinger (2019-2020)
 
 #include "WiHomeComm.h"
 
-WiHomeComm::WiHomeComm()//:config("wihome.cfg") // setup WiHomeComm object
+WiHomeComm::WiHomeComm() // setup WiHomeComm object
 {
   init(true);
 }
 
-WiHomeComm::WiHomeComm(bool _wihome_protocol)//:config("wihome.cfg") // setup WiHomeComm object
+WiHomeComm::WiHomeComm(bool _wihome_protocol)// setup WiHomeComm object
 {
   init(_wihome_protocol);
 }
@@ -17,13 +17,15 @@ WiHomeComm::WiHomeComm(bool _wihome_protocol)//:config("wihome.cfg") // setup Wi
 void WiHomeComm::init(bool _wihome_protocol)
 {
   wihome_protocol = _wihome_protocol;
+  Serial.printf("WiHomeComm initializing ...\n");
   config = new ConfigFileJSON("wihome.cfg");
+  Serial.printf("Loading user data from SPIFFS file:\n");
   LoadUserData();
+  Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
-  Serial.printf("WiHomeComm initializing ...\nUser data loaded from SPIFFS file:\n");
-  Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
-  etp_Wifi = new EnoughTimePassed(WIHOMECOMM_RECONNECT_INTERVAL);
+  etp_Wifi = new EnoughTimePassed(WIHOMECOMM_WAITFOR_CONNECT_INTERVAL);
+  connect_state = WH_INIT;
 }
 
 byte WiHomeComm::status()
@@ -32,20 +34,20 @@ byte WiHomeComm::status()
   // 1: WiFi connected and hub found, 0: unknown problem
   if (WiFi.getMode()==WIFI_STA)
   {
-    if (WiFi.status()==WL_CONNECTED)
+    if (connect_state == WH_CONNECTED)
     {
       if (hub_discovered || !wihome_protocol)
-        return 1;
+        return WIHOMECOMM_CONNECTED;
       else
-        return 2;
+        return WIHOMECOMM_NOHUB;
     }
     else
-      return 3;
+      return WIHOMECOMM_DISCONNECTED;
   }
   else if (WiFi.getMode()==WIFI_AP)
-    return 4;
+    return WIHOMECOMM_SOFTAP;
   else
-    return 0;
+    return WIHOMECOMM_UNKNOWN;
 }
 
 void WiHomeComm::set_status_led(SignalLED* _status_led)
@@ -153,74 +155,132 @@ void WiHomeComm::check(DynamicJsonDocument& doc)
 
 bool WiHomeComm::ConnectStation()
 {
-  if (WiFi.status()!=WL_CONNECTED || WiFi.getMode()!=WIFI_STA)
+  switch (connect_state)
   {
-    if (etp_Wifi->enough_time())
-    {
-      connect_count++;
-      Serial.printf("Connection attempt #%d.\n",connect_count);
-      if ((connect_count>WIHOMECOMM_MAX_CONNECT_COUNT) && (WIHOMECOMM_MAX_CONNECT_COUNT>0))
-      {
-        Serial.printf("Maximum number of connection attempts reached - rebooting!\n");
-        delay(1000);
-        ESP.restart();
-      }
+    case WH_INIT:
+      hub_discovered = false;
+      connect_state = WH_STOP_SOFTAP;
+      break;
+    case WH_STOP_SOFTAP:
       DestroyConfigWebServer();
-      WiFi.softAPdisconnect(true);
-      if (WiFi.isConnected())
-        WiFi.disconnect();
+      if (WiFi.getMode() == WIFI_AP)
+      {
+        if (WiFi.softAPdisconnect(true))
+        {
+          connect_state = WH_STOP_MDNS;
+          Serial.println("Stopped softAP mode.");
+        }
+        else
+          connect_state = WH_ERROR;
+      }
+      else
+        connect_state = WH_STOP_MDNS;
+      break;
+    case WH_STOP_MDNS:
+      if (wihome_protocol && MDNS.isRunning())
+      {
+        Serial.println("Running mDNS responder detected.");
+        if (MDNS.removeService("esp"))
+          Serial.println("mDNS service 'esp' stopped.");
+        if (MDNS.end())
+        {
+          Serial.println("mDNS responder stopped.");
+          connect_state = WH_STOP_UDP;
+        }
+        else
+        {
+          Serial.println("[ERROR] Could not stop mDNS responder.");
+          connect_state = WH_ERROR;
+        }
+      }
+      else
+        connect_state = WH_STOP_UDP;
+      break;
+    case WH_STOP_UDP:
       if (wihome_protocol)
       {
         Udp.stop();
         if (etp_findhub)
           delete etp_findhub;
+        etp_findhub = NULL;
+        hub_discovered = false;
         Serial.println("UDP services stopped.");
       }
-      while (WiFi.status()==WL_CONNECTED)
-        delay(50);
-      Serial.printf("Connecting to %s\n",ssid);
+      connect_state = WH_STOP_STA;
+      break;
+    case WH_STOP_STA:
+      WiFi.setAutoReconnect(false);
+      WiFi.disconnect(true);
+      if (!WiFi.isConnected() && WiFi.getMode() == WIFI_OFF)
+        connect_state = WH_START_STA; // everything should be disconnected and turned off at this point
+      else
+        connect_state = WH_ERROR;
+      break;
+    case WH_START_STA:
+      Serial.printf("Connecting to %s with password %s ",ssid, password);
       WiFi.begin(ssid,password);
       WiFi.hostname(client);
-      needMDNS=true;
-    }
-  }
-  if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && needMDNS)
-  {
-    Serial.printf("Connected to station (IP=%s, name=%s).\nSetting up MDNS client:\n",
-                  WiFi.localIP().toString().c_str(), WiFi.hostname().c_str());
-    if (!MDNS.begin(client))
-      Serial.println("Error setting up MDNS responder!");
-    else
-    {
-      Serial.println("mDNS responder started.");
-      MDNS.addService("esp", "tcp", 8080); // Announce esp tcp service on port 8080
-      needMDNS=false;
+      WiFi.setAutoReconnect(true);
+      connect_state = WH_WAITFOR_STA;
+      break;
+    case WH_WAITFOR_STA:
+      if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA)
+      {
+        Serial.printf("\nConnected to station (IP=%s, name=%s).\n",
+                      WiFi.localIP().toString().c_str(), WiFi.hostname().c_str());
+        connect_state = WH_START_MDNS;
+      }
+      else if (etp_Wifi->enough_time())
+        Serial.printf(".");
+      break;
+    case WH_START_MDNS:
+      if (wihome_protocol)
+      {
+        if (MDNS.begin(client))
+        {
+          Serial.println("mDNS responder started.");
+          MDNS.addService("esp", "tcp", 8080); // Announce esp tcp service on port 8080
+          connect_state = WH_START_OTA;
+        }
+        else
+        {
+          Serial.println("Error setting up MDNS responder!");
+          connect_state = WH_ERROR;
+        }
+      }
+      else
+        connect_state = WH_START_OTA;
+      break;
+    case WH_START_OTA:
       ArduinoOTA.setPort(8266);
       ArduinoOTA.setHostname(client);
       ArduinoOTA.begin();
       Serial.println("OTA service started.");
+      connect_state = WH_START_UDP;
+      break;
+    case WH_START_UDP:
       if (wihome_protocol)
       {
         Udp.begin(localUdpPort);
         etp_findhub = new EnoughTimePassed(WIHOMECOMM_FINDHUB_INTERVAL);
         Serial.println("UDP services created.");
       }
-    }
+      connect_state = WH_CONNECTED;
+      break;
+    case WH_CONNECTED:
+      ArduinoOTA.handle();
+      if (wihome_protocol)
+        findhub();
+      break;
   }
-  if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA && !needMDNS)
-  {
-    connect_count = 0;
-    ArduinoOTA.handle();
-    if (wihome_protocol)
-      findhub();
+  if (connect_state == WH_CONNECTED)
     return true;
-  }
-  hub_discovered = false;
   return false;
 }
 
 void WiHomeComm::ConnectSoftAP()
 {
+  connect_state = WH_INIT;
   if (WiFi.status()!=WL_DISCONNECTED || WiFi.getMode()!=WIFI_AP)
   {
     hub_discovered = false;
@@ -230,6 +290,7 @@ void WiHomeComm::ConnectSoftAP()
       WiFi.disconnect(true);
     while (WiFi.status()==WL_CONNECTED)
       delay(50);
+
     IPAddress apIP(192, 168, 4, 1);
     IPAddress netMsk(255, 255, 255, 0);
     WiFi.mode(WIFI_AP);
@@ -257,12 +318,12 @@ void WiHomeComm::ConnectSoftAP()
 
 bool WiHomeComm::LoadUserData()
 {
-  config->get("ssid", ssid, "password", password, "client", client);
+  config->get("ssid", ssid, "password", password, "client", client, "homekit_reset", &homekit_reset);
 }
 
 void WiHomeComm::SaveUserData()
 {
-  config->set("ssid", ssid, "password", password, "client", client);
+  config->set("ssid", ssid, "password", password, "client", client, "homekit_reset", homekit_reset);
   config->dump();
 }
 
@@ -286,11 +347,15 @@ void WiHomeComm::DestroyConfigWebServer()
   {
     webserver->stop();
     delete webserver;
+    webserver = NULL;
+    Serial.println("Destroyed web server.");
   }
   if (dnsServer)
   {
     dnsServer->stop();
     delete dnsServer;
+    dnsServer = NULL;
+    Serial.println("Destroyed DNS server.");
   }
 }
 
@@ -304,13 +369,14 @@ void WiHomeComm::handleRoot()
   html += html_config_form3;
   html += client;
   html += html_config_form4;
-  webserver->send(200, "text/html", html);
+    webserver->send(200, "text/html", html);
 }
 
 void WiHomeComm::handleSaveAndRestart()
 {
   char buf[32];
   String message = "Save and Restart\n\n";
+  homekit_reset = false;
   message += "URI: ";
   message += webserver->uri();
   message += "\nMethod: ";
@@ -327,18 +393,22 @@ void WiHomeComm::handleSaveAndRestart()
       strcpy(password, (webserver->arg(i)).c_str());
     if ((webserver->argName(i)).compareTo("client")==0)
       strcpy(client, (webserver->arg(i)).c_str());
+    if ((webserver->argName(i)).compareTo("homekit_reset")==0)
+      homekit_reset = true;
   }
   Serial.println("--- Data to be saved begin ---");
   Serial.println(ssid);
   Serial.println(password);
   Serial.println(client);
+  Serial.println(homekit_reset);
   Serial.println("--- Data to be saved end ---");
   SaveUserData();
-  message += "Userdata saved to EEPROM.\n";
-  Serial.println("Userdata saved to EEPROM.");
+  message += "Userdata saved.\n";
+  Serial.println("Userdata saved.");
   webserver->send(200, "text/plain", message);
   delay(500);
   softAPmode = false;
+  ESP.restart();
 }
 
 void WiHomeComm::handleClient()
@@ -351,19 +421,16 @@ void WiHomeComm::findhub()
 {
   if (etp_findhub->enough_time() && wihome_protocol)
   {
-    // Serial.printf("\nBroadcast findhub message.\n");
+    Serial.printf("\nBroadcast findhub message.\n");
     IPAddress ip = WiFi.localIP();
     IPAddress subnetmask = WiFi.subnetMask();
     IPAddress broadcast_ip(0,0,0,0);
     for (int n=0; n<4; n++)
       broadcast_ip[n] = (ip[n] & subnetmask[n]) | ~subnetmask[n];
-    // DynamicJsonBuffer jsonBuffer;
-    // JsonObject& root = jsonBuffer.createObject();
     DynamicJsonDocument doc(1024);
     doc["cmd"]="findhub";
     doc["client"]=client;
     Udp.beginPacket(broadcast_ip, localUdpPort);
-    // root.printTo(Udp);
     serializeJson(doc, Udp);
     Udp.endPacket();
   }
@@ -383,7 +450,6 @@ void WiHomeComm::serve_packet(DynamicJsonDocument& doc)
       incomingPacket[len] = 0;
     // Serial.printf("UDP packet contents: %s\n", incomingPacket);
 
-    // JsonObject& root = jsonBuffer->parseObject(incomingPacket);
     DeserializationError error = deserializeJson(doc, incomingPacket);
     // Test if parsing succeeds.
     if (error)
@@ -400,27 +466,21 @@ void WiHomeComm::serve_packet(DynamicJsonDocument& doc)
           {
             doc["cmd"] = "clientid";
             Udp.beginPacket(Udp.remoteIP(), localUdpPort);
-            // root.printTo(Udp);
             serializeJson(doc, Udp);
             Udp.endPacket();
             hubip = Udp.remoteIP();
             hub_discovered = true;
-            // return JsonObject::invalid();
           }
         }
         if (doc["cmd"]=="hubid")
         {
-          // Serial.printf("DISCOVERED HUB: %s\n",Udp.remoteIP().toString().c_str());
+          Serial.printf("Found hub: %s\n",Udp.remoteIP().toString().c_str());
           hubip = Udp.remoteIP();
           hub_discovered = true;
-          // return JsonObject::invalid();
         }
       }
     }
-    // return root;
   }
-  // else
-  //   return JsonObject::invalid();
 }
 
 void WiHomeComm::send(DynamicJsonDocument& doc)
@@ -432,4 +492,12 @@ void WiHomeComm::send(DynamicJsonDocument& doc)
     serializeJson(doc, Udp);
     Udp.endPacket();
   }
+}
+
+bool WiHomeComm::is_homekit_reset()
+{
+  bool _homekit_reset = homekit_reset;
+  homekit_reset = false;
+  SaveUserData();
+  return _homekit_reset;
 }

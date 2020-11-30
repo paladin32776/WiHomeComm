@@ -20,46 +20,65 @@
 #ifndef WIHOMECOMM_H
 #define WIHOMECOMM_H
 
-#define WIHOMECOMM_RECONNECT_INTERVAL 10000
+//#define WIHOMECOMM_RECONNECT_INTERVAL 10000
+#define WIHOMECOMM_WAITFOR_CONNECT_INTERVAL 250
 #define WIHOMECOMM_MAX_CONNECT_COUNT 0
 #define WIHOMECOMM_FINDHUB_INTERVAL 60000 //ms
+
+#define WIHOMECOMM_UNKNOWN 0
+#define WIHOMECOMM_CONNECTED 1
+#define WIHOMECOMM_NOHUB 2
+#define WIHOMECOMM_DISCONNECTED 3
+#define WIHOMECOMM_SOFTAP 4
 
 const char html_config_form1[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>  SSID:<br>  <input type='text' name='ssid' value='"};
 const char html_config_form2[] = {"'>  <br>  Password:<br>  <input type='text' name='password' value='"};
 const char html_config_form3[] = {"'>  <br>  Client Name:<br>  <input type='text' name='client' value='"};
-const char html_config_form4[] = {"'>  <br><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
+const char html_config_form4[] = {"'>  <br> Homekit Reset:<br> <input type='checkbox' name='homekit_reset' value=1> <br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
 class WiHomeComm
 {
   private:
     // UserData variables and configuration
-    unsigned int NVM_Offset_UserData = 0;
-    byte valid_ud_id = 188;
-    byte ud_id;
     char ssid[32];
     char password[32];
     char client[32];
-    byte connect_count = 0;
-    // NVM user data storage:
-    Json_NVM* jnvm;
+    bool homekit_reset = false;
     // ConfigFileJSON:
     ConfigFileJSON* config;
     // SoftAP configuration
     char ssid_softAP[32];
-    ESP8266WebServer* webserver;
-    DNSServer* dnsServer;
+    ESP8266WebServer* webserver = NULL;
+    DNSServer* dnsServer = NULL;
     const byte DNS_PORT = 53;
     // WiHome UDP communication configuration
     WiFiUDP Udp;
     unsigned int localUdpPort = 24559; //24557;
     char incomingPacket[255];
     IPAddress hubip;
-    EnoughTimePassed* etp_findhub;
+    EnoughTimePassed* etp_findhub = NULL;
     bool hub_discovered = false;
     bool wihome_protocol = true;
     // Settings for WiFi persistence
-    EnoughTimePassed* etp_Wifi;
+    EnoughTimePassed* etp_Wifi = NULL;
     bool needMDNS = true;
+    enum WIHOME_STATES
+    {
+      WH_INIT,
+      WH_STOP_SOFTAP,
+      WH_STOP_MDNS,
+      WH_STOP_UDP,
+      WH_STOP_STA,
+      WH_START_STA,
+      WH_WAITFOR_STA,
+      WH_START_MDNS,
+      WH_START_OTA,
+      WH_START_UDP,
+      WH_CONNECTED,
+      WH_ERROR = 255,
+    };
+    enum WIHOME_STATES connect_state = WH_INIT;
+
     // Status led:
     SignalLED* status_led;
     int handle_status_led = 0;
@@ -114,6 +133,7 @@ class WiHomeComm
     void check(DynamicJsonDocument& doc);
     void send(DynamicJsonDocument& doc);
     bool softAPmode = false;
+    bool is_homekit_reset();
     // Template functions to write s variable number of input parameters as JSON object:
     template<typename... Args>
     bool sendJSON(Args... args)
