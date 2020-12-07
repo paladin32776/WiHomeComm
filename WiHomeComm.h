@@ -128,6 +128,7 @@ class WiHomeComm
     void set_status_led(SignalLED* _status_led, RGBstrip* _rgbstrip);
     void set_button(NoBounceButtons* _nbb, unsigned char _button);
     void set_button(NoBounceButtons* _nbb, unsigned char _button, unsigned char _softAP_trigger);
+    void get_client_name(char* target);
     byte status(); // get connection status
     void check();
     void check(DynamicJsonDocument& doc);

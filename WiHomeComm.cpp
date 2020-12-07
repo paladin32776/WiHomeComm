@@ -117,6 +117,11 @@ void WiHomeComm::set_button(NoBounceButtons* _nbb, unsigned char _button, unsign
   handle_button = true;
 }
 
+void WiHomeComm::get_client_name(char* target)
+{
+  strcpy(target, client);
+}
+
 void WiHomeComm::check_button()
 {
   if (handle_button)
