@@ -9,9 +9,7 @@
 #include <pgmspace.h>
 #include "Arduino.h"
 #include "EnoughTimePassed.h"
-#include <EEPROM.h>
 #include <ArduinoJson.h>
-#include "Json_NVM.h"
 #include "ConfigFileJSON.h"
 #include "SignalLED.h"
 #include "NoBounceButtons.h"
