@@ -51,7 +51,7 @@ class WiHomeComm
     const byte DNS_PORT = 53;
     // WiHome UDP communication configuration
     WiFiUDP Udp;
-    unsigned int localUdpPort = 24559; //24557;
+    unsigned int localUdpPort = 24557; //24559;
     char incomingPacket[255];
     IPAddress hubip;
     EnoughTimePassed* etp_findhub = NULL;
