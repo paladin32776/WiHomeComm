@@ -91,7 +91,7 @@ class WiHomeComm
     // Methods:
     bool ConnectStation();
     void ConnectSoftAP();
-    bool LoadUserData();
+    void LoadUserData();
     void SaveUserData();
     void CreateConfigWebServer(int port);
     void DestroyConfigWebServer();
@@ -135,7 +135,7 @@ class WiHomeComm
     bool is_homekit_reset();
     // Template functions to write s variable number of input parameters as JSON object:
     template<typename... Args>
-    bool sendJSON(Args... args)
+    void sendJSON(Args... args)
     {
         DynamicJsonDocument doc(1024);
         assembleJSON(doc, args...);

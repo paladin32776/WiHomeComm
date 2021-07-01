@@ -321,7 +321,7 @@ void WiHomeComm::ConnectSoftAP()
 
 }
 
-bool WiHomeComm::LoadUserData()
+void WiHomeComm::LoadUserData()
 {
   config->get("ssid", ssid, "password", password, "client", client, "homekit_reset", &homekit_reset);
 }
