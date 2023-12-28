@@ -6,17 +6,23 @@
 
 WiHomeComm::WiHomeComm() // setup WiHomeComm object
 {
-  init(true);
+  init(true, true);
 }
 
-WiHomeComm::WiHomeComm(bool _wihome_protocol)// setup WiHomeComm object
+WiHomeComm::WiHomeComm(bool _wihome_protocol) // setup WiHomeComm object
 {
-  init(_wihome_protocol);
+  init(_wihome_protocol, true);
 }
 
-void WiHomeComm::init(bool _wihome_protocol)
+WiHomeComm::WiHomeComm(bool _wihome_protocol, bool _connect_wifi) // setup WiHomeComm object
+{
+  init(_wihome_protocol, _connect_wifi);
+}
+
+void WiHomeComm::init(bool _wihome_protocol, bool _connect_wifi)
 {
   wihome_protocol = _wihome_protocol;
+  connect_wifi = _connect_wifi;
   Serial.printf("WiHomeComm initializing ...\n");
   config = new ConfigFileJSON("wihome.cfg");
   Serial.printf("Loading user data from SPIFFS file:\n");
@@ -222,11 +228,16 @@ bool WiHomeComm::ConnectStation()
         connect_state = WH_ERROR;
       break;
     case WH_START_STA:
-      Serial.printf("Connecting to %s with password %s ",ssid, password);
-      WiFi.begin(ssid,password);
-      WiFi.hostname(client);
-      WiFi.setAutoReconnect(true);
-      connect_state = WH_WAITFOR_STA;
+      if (connect_wifi)
+      {  
+        Serial.printf("Connecting to %s with password %s ",ssid, password);
+        WiFi.begin(ssid,password);
+        WiFi.hostname(client);
+        WiFi.setAutoReconnect(true);
+        connect_state = WH_WAITFOR_STA;
+      }
+      else
+        connect_state = WH_NO_WIFI;
       break;
     case WH_WAITFOR_STA:
       if (WiFi.status() == WL_CONNECTED && WiFi.getMode() == WIFI_STA)
@@ -277,8 +288,10 @@ bool WiHomeComm::ConnectStation()
       if (wihome_protocol)
         findhub();
       break;
+    case WH_NO_WIFI:
+      break;
   }
-  if (connect_state == WH_CONNECTED)
+  if ((connect_state == WH_CONNECTED) && (connect_state == WH_NO_WIFI))
     return true;
   return false;
 }
@@ -324,11 +337,35 @@ void WiHomeComm::ConnectSoftAP()
 void WiHomeComm::LoadUserData()
 {
   config->get("ssid", ssid, "password", password, "client", client, "homekit_reset", &homekit_reset);
+  if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+      {
+        switch(tParas[n])
+        {
+          case TYPE_CSTR:
+            config->get(pNames[n], (char*) pParas[n]);
+          case TYPE_FLOAT:
+            config->get(pNames[n], (float*) pParas[n]);
+        }
+      }
+  config->dump();
 }
 
 void WiHomeComm::SaveUserData()
 {
-  config->set("ssid", ssid, "password", password, "client", client, "homekit_reset", homekit_reset);
+  config->set_nowrite("ssid", ssid, "password", password, "client", client, "homekit_reset", homekit_reset);
+    if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+      {
+        switch(tParas[n])
+        {
+          case TYPE_CSTR:
+            config->set_nowrite(pNames[n], (char*) pParas[n]);
+          case TYPE_FLOAT:
+            config->set_nowrite(pNames[n], *((float*) pParas[n]));
+        }
+      }
+  config->set("dummy", 0);
   config->dump();
 }
 
@@ -367,13 +404,26 @@ void WiHomeComm::DestroyConfigWebServer()
 void WiHomeComm::handleRoot()
 {
   LoadUserData();
-  String html = html_config_form1;
+  String html = html_config_form_begin;
+  html += html_config_form1;
   html += ssid;
   html += html_config_form2;
   html += password;
   html += html_config_form3;
   html += client;
-  html += html_config_form4;
+  if (N_config_paras>0)
+    for (int n=0; n<N_config_paras; n++)
+    {
+      char str[32];
+      get_config_parameter_string(str, n);
+      html += "'><br>";
+      html += pPrompts[n];
+      html += "<br><input type='text' name='";
+      html += pNames[n];
+      html += "' value='";
+      html += str;
+    }
+  html += html_config_form_end;
     webserver->send(200, "text/html", html);
 }
 
@@ -400,6 +450,10 @@ void WiHomeComm::handleSaveAndRestart()
       strcpy(client, (webserver->arg(i)).c_str());
     if ((webserver->argName(i)).compareTo("homekit_reset")==0)
       homekit_reset = true;
+    if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+        if ((webserver->argName(i)).compareTo(pNames[n])==0)
+          update_config_parameter(n, (webserver->arg(i)).c_str());   
   }
   Serial.println("--- Data to be saved begin ---");
   Serial.println(ssid);
@@ -407,6 +461,17 @@ void WiHomeComm::handleSaveAndRestart()
   Serial.println(client);
   Serial.println(homekit_reset);
   Serial.println("--- Data to be saved end ---");
+  Serial.println("--- Additional parameters begin ---");
+  if (N_config_paras>0)
+    for (int n=0; n<N_config_paras; n++)
+    {
+      char str[32];
+      get_config_parameter_string(str, n);
+      Serial.print(pNames[n]);
+      Serial.print(": ");
+      Serial.println(str);
+    }
+  Serial.println("--- Additional parameters end ---");    
   SaveUserData();
   message += "Userdata saved.\n";
   Serial.println("Userdata saved.");
@@ -506,3 +571,50 @@ bool WiHomeComm::is_homekit_reset()
   SaveUserData();
   return _homekit_reset;
 }
+
+void WiHomeComm::add_config_parameter(void* pPara, const char* pName, const char* pPrompt, datatypes tPara)
+{
+  pParas[N_config_paras] = pPara;
+  pPrompts[N_config_paras] = pPrompt;
+  tParas[N_config_paras] = tPara;
+  pNames[N_config_paras] = pName;
+  N_config_paras++;
+}
+
+void WiHomeComm::add_config_parameter(char* pPara, const char* pName, const char* pPrompt)
+{
+  add_config_parameter((void*)pPara, pName, pPrompt, TYPE_CSTR);
+}
+
+void WiHomeComm::add_config_parameter(float* pPara, const char* pName, const char* pPrompt)
+{
+  add_config_parameter((void*)pPara, pName, pPrompt, TYPE_FLOAT);
+}
+
+void WiHomeComm::update_config_parameter(int n, const char* value)
+{
+  switch (tParas[n])
+  {
+    case TYPE_CSTR:
+      strcpy((char*) pParas[n], value);
+      break;
+    case TYPE_FLOAT:
+      *((float*) pParas[n]) = String(value).toFloat();
+      break;
+  }
+}
+
+void WiHomeComm::get_config_parameter_string(char* str, int n)
+{
+  switch (tParas[n])
+  {
+    case TYPE_CSTR:
+      strcpy(str, (char*) pParas[n]);
+      break;
+    case TYPE_FLOAT:
+      dtostrf(*((float*) pParas[n]), 10, 8, str);
+      //strcpy(str, String(*((float*) pParas[n])));
+      break;
+  }
+}
+

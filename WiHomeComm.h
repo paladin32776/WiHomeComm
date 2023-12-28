@@ -29,10 +29,11 @@
 #define WIHOMECOMM_DISCONNECTED 3
 #define WIHOMECOMM_SOFTAP 4
 
-const char html_config_form1[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>  SSID:<br>  <input type='text' name='ssid' value='"};
-const char html_config_form2[] = {"'>  <br>  Password:<br>  <input type='text' name='password' value='"};
-const char html_config_form3[] = {"'>  <br>  Client Name:<br>  <input type='text' name='client' value='"};
-const char html_config_form4[] = {"'>  <br> Homekit Reset:<br> <input type='checkbox' name='homekit_reset' value=1> <br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
+const char html_config_form_begin[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>"};
+const char html_config_form1[] = {"SSID:<br>  <input type='text' name='ssid' value='"};
+const char html_config_form2[] = {"'><br>Password:<br>  <input type='text' name='password' value='"};
+const char html_config_form3[] = {"'><br>Client Name:<br>  <input type='text' name='client' value='"};
+const char html_config_form_end[] = {"'><br>Homekit Reset:<br> <input type='checkbox' name='homekit_reset' value=1><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
 class WiHomeComm
 {
@@ -57,6 +58,7 @@ class WiHomeComm
     EnoughTimePassed* etp_findhub = NULL;
     bool hub_discovered = false;
     bool wihome_protocol = true;
+    bool connect_wifi = true;
     // Settings for WiFi persistence
     EnoughTimePassed* etp_Wifi = NULL;
     bool needMDNS = true;
@@ -73,10 +75,10 @@ class WiHomeComm
       WH_START_OTA,
       WH_START_UDP,
       WH_CONNECTED,
+      WH_NO_WIFI,
       WH_ERROR = 255,
     };
     enum WIHOME_STATES connect_state = WH_INIT;
-
     // Status led:
     SignalLED* status_led;
     int handle_status_led = 0;
@@ -91,7 +93,6 @@ class WiHomeComm
     // Methods:
     bool ConnectStation();
     void ConnectSoftAP();
-    void LoadUserData();
     void SaveUserData();
     void CreateConfigWebServer(int port);
     void DestroyConfigWebServer();
@@ -101,7 +102,7 @@ class WiHomeComm
     void handleClient();
     void findhub();
     void serve_packet(DynamicJsonDocument& doc);
-    void init(bool _wihome_protocol);
+    void init(bool _wihome_protocol, bool _connect_wifi);
     void check_status_led();
     void check_button();
     // Template functions to assemble JSON object from variable number of input parameters:
@@ -116,10 +117,26 @@ class WiHomeComm
       doc[parameter]=value;
       assembleJSON(doc, args...);
     }
-
+    // Additional config parameters:
+    unsigned int N_config_paras = 0;
+    void* pParas[16]; // Storage for up to 16 pointers to additional parameters
+    enum datatypes
+    {
+      TYPE_BOOL,
+      TYPE_BYTE,
+      TYPE_INT,
+      TYPE_UINT,
+      TYPE_FLOAT,
+      TYPE_CSTR,
+      TYPE_STRING,
+    } tParas[16]; // Storage for datatypes of up to 16 parameters
+    const char* pPrompts[16]; // Storage for up to 16 pointers to prompts for additional parameters
+    const char* pNames[16]; // Storage for up to 16 pointers to names of additional parameters
   public:
     WiHomeComm();
-    WiHomeComm(bool _wihome_protocol);  // Optional ommission of wihome UDP communication funcitonality
+    WiHomeComm(bool _wihome_protocol);  // Optional argument to deactivate wihome UDP communication protocol
+    WiHomeComm(bool _wihome_protocol, bool _connect_wifi); // Optional argument to not connect to a Wifi AP
+    void LoadUserData();
     void set_status_led(SignalLED* _status_led);
     void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
     void set_status_led(SignalLED* _status_led, SignalLED* _relay);
@@ -141,6 +158,14 @@ class WiHomeComm
         assembleJSON(doc, args...);
         send(doc);
     }
+
+    void add_config_parameter(void* pPara, const char* pName, const char* pPrompt, datatypes tPara);
+    void add_config_parameter(char* pPara, const char* pName, const char* pPrompt);
+    void add_config_parameter(float* pPara, const char* pName, const char* pPrompt);
+
+    void update_config_parameter(int n, const char* value);
+
+    void get_config_parameter_string(char* str, int n);
 };
 
 #endif // WIHOMECOMM_H
