@@ -21,6 +21,7 @@ WiHomeComm::WiHomeComm(bool _wihome_protocol, bool _connect_wifi) // setup WiHom
 
 void WiHomeComm::init(bool _wihome_protocol, bool _connect_wifi)
 {
+  main_html = NULL;
   wihome_protocol = _wihome_protocol;
   connect_wifi = _connect_wifi;
   Serial.printf("WiHomeComm initializing ...\n");
@@ -291,7 +292,18 @@ bool WiHomeComm::ConnectStation()
     case WH_NO_WIFI:
       break;
   }
-  if ((connect_state == WH_CONNECTED) && (connect_state == WH_NO_WIFI))
+  if (connect_state == WH_CONNECTED)
+  {
+    if (!main_webserver)
+    {
+      if (config_webserver)
+        DestroyConfigWebServer();
+      CreateMainWebServer(80);
+    }
+    else
+      handleClientMain();
+  }
+  if ((connect_state == WH_CONNECTED) || (connect_state == WH_NO_WIFI))
     return true;
   return false;
 }
@@ -326,10 +338,14 @@ void WiHomeComm::ConnectSoftAP()
   }
   else
   {
-    if (!webserver)
+    if (!config_webserver)
+    {
+      if (main_webserver)
+        DestroyMainWebServer();
       CreateConfigWebServer(80);
+    }
     else
-      handleClient();
+      handleClientConfig();
   }
 
 }
@@ -375,21 +391,21 @@ void WiHomeComm::CreateConfigWebServer(int port)
   IPAddress apIP(192, 168, 4, 1);
   dnsServer = new DNSServer();
   dnsServer->start(DNS_PORT, "*", apIP);
-  webserver = new ESP8266WebServer(port);
-  webserver->on("/", std::bind(&WiHomeComm::handleRoot, this));
-  webserver->onNotFound(std::bind(&WiHomeComm::handleRoot, this));
-  webserver->on("/save_and_restart.php", std::bind(&WiHomeComm::handleSaveAndRestart, this));
-  webserver->begin();
+  config_webserver = new ESP8266WebServer(port);
+  config_webserver->on("/", std::bind(&WiHomeComm::handleRootConfig, this));
+  config_webserver->onNotFound(std::bind(&WiHomeComm::handleRootConfig, this));
+  config_webserver->on("/save_and_restart.php", std::bind(&WiHomeComm::handleSaveAndRestartConfig, this));
+  config_webserver->begin();
   Serial.println("HTTP server started.");
 }
 
 void WiHomeComm::DestroyConfigWebServer()
 {
-  if(webserver)
+  if(config_webserver)
   {
-    webserver->stop();
-    delete webserver;
-    webserver = NULL;
+    config_webserver->stop();
+    delete config_webserver;
+    config_webserver = NULL;
     Serial.println("Destroyed web server.");
   }
   if (dnsServer)
@@ -401,7 +417,7 @@ void WiHomeComm::DestroyConfigWebServer()
   }
 }
 
-void WiHomeComm::handleRoot()
+void WiHomeComm::handleRootConfig()
 {
   LoadUserData();
   String html = html_config_form_begin;
@@ -424,36 +440,35 @@ void WiHomeComm::handleRoot()
       html += str;
     }
   html += html_config_form_end;
-    webserver->send(200, "text/html", html);
+    config_webserver->send(200, "text/html", html);
 }
 
-void WiHomeComm::handleSaveAndRestart()
+void WiHomeComm::handleSaveAndRestartConfig()
 {
-  char buf[32];
   String message = "Save and Restart\n\n";
   homekit_reset = false;
   message += "URI: ";
-  message += webserver->uri();
+  message += config_webserver->uri();
   message += "\nMethod: ";
-  message += (webserver->method() == HTTP_GET)?"GET":"POST";
+  message += (config_webserver->method() == HTTP_GET)?"GET":"POST";
   message += "\nArguments: ";
-  message += webserver->args();
+  message += config_webserver->args();
   message += "\n";
-  for (uint8_t i=0; i<webserver->args(); i++)
+  for (uint8_t i=0; i<config_webserver->args(); i++)
   {
-    message += " " + webserver->argName(i) + ": " + webserver->arg(i) + "\n";
-    if ((webserver->argName(i)).compareTo("ssid")==0)
-      strcpy(ssid, (webserver->arg(i)).c_str());
-    if ((webserver->argName(i)).compareTo("password")==0)
-      strcpy(password, (webserver->arg(i)).c_str());
-    if ((webserver->argName(i)).compareTo("client")==0)
-      strcpy(client, (webserver->arg(i)).c_str());
-    if ((webserver->argName(i)).compareTo("homekit_reset")==0)
+    message += " " + config_webserver->argName(i) + ": " + config_webserver->arg(i) + "\n";
+    if ((config_webserver->argName(i)).compareTo("ssid")==0)
+      strcpy(ssid, (config_webserver->arg(i)).c_str());
+    if ((config_webserver->argName(i)).compareTo("password")==0)
+      strcpy(password, (config_webserver->arg(i)).c_str());
+    if ((config_webserver->argName(i)).compareTo("client")==0)
+      strcpy(client, (config_webserver->arg(i)).c_str());
+    if ((config_webserver->argName(i)).compareTo("homekit_reset")==0)
       homekit_reset = true;
     if (N_config_paras>0)
       for (int n=0; n<N_config_paras; n++)
-        if ((webserver->argName(i)).compareTo(pNames[n])==0)
-          update_config_parameter(n, (webserver->arg(i)).c_str());   
+        if ((config_webserver->argName(i)).compareTo(pNames[n])==0)
+          update_config_parameter(n, (config_webserver->arg(i)).c_str());   
   }
   Serial.println("--- Data to be saved begin ---");
   Serial.println(ssid);
@@ -475,16 +490,89 @@ void WiHomeComm::handleSaveAndRestart()
   SaveUserData();
   message += "Userdata saved.\n";
   Serial.println("Userdata saved.");
-  webserver->send(200, "text/plain", message);
+  config_webserver->send(200, "text/plain", message);
   delay(500);
   softAPmode = false;
   ESP.restart();
 }
 
-void WiHomeComm::handleClient()
+void WiHomeComm::handleClientConfig()
 {
   dnsServer->processNextRequest();
-  webserver->handleClient();
+  config_webserver->handleClient();
+}
+
+void WiHomeComm::CreateMainWebServer(int port)
+{
+  main_webserver = new ESP8266WebServer(port);
+  main_webserver->on("/", std::bind(&WiHomeComm::handleRootMain, this));
+  main_webserver->onNotFound(std::bind(&WiHomeComm::handleRootMain, this));
+  // main_webserver->on("/save.php", std::bind(&WiHomeComm::handleSaveMain, this));
+  main_webserver->begin();
+  Serial.println("HTTP main server started.");
+}
+
+void WiHomeComm::DestroyMainWebServer()
+{
+  if(main_webserver)
+  {
+    main_webserver->stop();
+    delete main_webserver;
+    main_webserver = NULL;
+    Serial.println("Destroyed main web server.");
+  }
+}
+
+void WiHomeComm::handleRootMain()
+{
+  // Get submit value from web page submission:
+  char submit[32];
+  strcpy(submit,"");
+  for (uint8_t i=0; i<main_webserver->args(); i++)
+    if ((main_webserver->argName(i)).compareTo("submit")==0)
+      strcpy(submit, (main_webserver->arg(i)).c_str());
+  // If submit=save, save the values in the web form to NVM:
+  if (strcmp(submit,"save")==0)
+  {
+    for (uint8_t i=0; i<main_webserver->args(); i++)
+    {
+      if (N_config_paras>0)
+        for (int n=0; n<N_config_paras; n++)
+          if ((main_webserver->argName(i)).compareTo(pNames[n])==0)
+            update_config_parameter(n, (main_webserver->arg(i)).c_str());   
+    }
+    SaveUserData();
+    Serial.println("Userdata saved.");
+  }
+  // Display web page with form:
+  LoadUserData();
+  String html = html_main_begin;
+  html += "Client: ";
+  html += client;
+  html += "<br>";
+  if (main_html)
+    html += (*main_html);
+  html += html_main_form_begin;
+  if (N_config_paras>0)
+    for (int n=0; n<N_config_paras; n++)
+    {
+      char str[32];
+      get_config_parameter_string(str, n);
+      html += "<br>";
+      html += pPrompts[n];
+      html += "<br><input type='text' name='";
+      html += pNames[n];
+      html += "' value='";
+      html += str;
+      html += "'>";
+    }
+  html += html_main_form_end;
+    main_webserver->send(200, "text/html", html);
+}
+
+void WiHomeComm::handleClientMain()
+{
+  main_webserver->handleClient();
 }
 
 void WiHomeComm::findhub()
@@ -579,6 +667,7 @@ void WiHomeComm::add_config_parameter(void* pPara, const char* pName, const char
   tParas[N_config_paras] = tPara;
   pNames[N_config_paras] = pName;
   N_config_paras++;
+  LoadUserData();
 }
 
 void WiHomeComm::add_config_parameter(char* pPara, const char* pName, const char* pPrompt)
@@ -612,9 +701,18 @@ void WiHomeComm::get_config_parameter_string(char* str, int n)
       strcpy(str, (char*) pParas[n]);
       break;
     case TYPE_FLOAT:
-      dtostrf(*((float*) pParas[n]), 10, 8, str);
-      //strcpy(str, String(*((float*) pParas[n])));
+      dtostrf(*((float*) pParas[n]), 10, 7, str);
       break;
   }
+}
+
+void WiHomeComm::attach_html(String* _main_html)
+{
+  main_html = _main_html;
+}
+
+void WiHomeComm::detach_html()
+{
+  main_html = NULL;
 }
 

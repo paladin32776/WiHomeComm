@@ -35,6 +35,10 @@ const char html_config_form2[] = {"'><br>Password:<br>  <input type='text' name=
 const char html_config_form3[] = {"'><br>Client Name:<br>  <input type='text' name='client' value='"};
 const char html_config_form_end[] = {"'><br>Homekit Reset:<br> <input type='checkbox' name='homekit_reset' value=1><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
+const char html_main_begin[] = {"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'></head><body style='font-family:verdana;'><h2 style='font-family:verdana;'>WiHome Main Page</h2>"};
+const char html_main_form_begin[] = {"<form action='/' style='font-family:verdana;'>"};
+const char html_main_form_end[] = {"<br><input type='submit' name='submit' value='save'><input type='submit' name='submit' value='reload'></form> </body></html>"};
+
 class WiHomeComm
 {
   private:
@@ -47,7 +51,8 @@ class WiHomeComm
     ConfigFileJSON* config;
     // SoftAP configuration
     char ssid_softAP[32];
-    ESP8266WebServer* webserver = NULL;
+    ESP8266WebServer* config_webserver = NULL;
+    ESP8266WebServer* main_webserver = NULL;
     DNSServer* dnsServer = NULL;
     const byte DNS_PORT = 53;
     // WiHome UDP communication configuration
@@ -93,13 +98,22 @@ class WiHomeComm
     // Methods:
     bool ConnectStation();
     void ConnectSoftAP();
+    void LoadUserData();
     void SaveUserData();
+    // Config web server for SoftAP mode:
     void CreateConfigWebServer(int port);
     void DestroyConfigWebServer();
-    void handleRoot();
-    void handleNotFound();
-    void handleSaveAndRestart();
-    void handleClient();
+    void handleRootConfig();
+    void handleNotFoundConfig();
+    void handleSaveAndRestartConfig();
+    void handleClientConfig();
+    // Main web server for regular Wifi connection:
+    void CreateMainWebServer(int port);
+    void DestroyMainWebServer();
+    void handleRootMain();
+    void handleSaveMain();
+    void handleClientMain();
+    // WiHome communication methods:
     void findhub();
     void serve_packet(DynamicJsonDocument& doc);
     void init(bool _wihome_protocol, bool _connect_wifi);
@@ -132,11 +146,12 @@ class WiHomeComm
     } tParas[16]; // Storage for datatypes of up to 16 parameters
     const char* pPrompts[16]; // Storage for up to 16 pointers to prompts for additional parameters
     const char* pNames[16]; // Storage for up to 16 pointers to names of additional parameters
+    // Pointer to html string to display on main web server page:
+    String* main_html;
   public:
     WiHomeComm();
     WiHomeComm(bool _wihome_protocol);  // Optional argument to deactivate wihome UDP communication protocol
     WiHomeComm(bool _wihome_protocol, bool _connect_wifi); // Optional argument to not connect to a Wifi AP
-    void LoadUserData();
     void set_status_led(SignalLED* _status_led);
     void set_status_led(SignalLED* _status_led, unsigned int* _led_status);
     void set_status_led(SignalLED* _status_led, SignalLED* _relay);
@@ -158,14 +173,15 @@ class WiHomeComm
         assembleJSON(doc, args...);
         send(doc);
     }
-
+    // Methods for handling external parameters on config & main web page:
     void add_config_parameter(void* pPara, const char* pName, const char* pPrompt, datatypes tPara);
     void add_config_parameter(char* pPara, const char* pName, const char* pPrompt);
     void add_config_parameter(float* pPara, const char* pName, const char* pPrompt);
-
     void update_config_parameter(int n, const char* value);
-
     void get_config_parameter_string(char* str, int n);
+    // Methods to handle external html content for main web page:
+    void attach_html(String* _main_html);
+    void detach_html();
 };
 
 #endif // WIHOMECOMM_H
