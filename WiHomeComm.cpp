@@ -381,12 +381,18 @@ void WiHomeComm::AddFormItems(String &html, bool show_secure)
         html += pPrompts[n];
         if (tParas[n]==TYPE_BOOL)
         {
-          html += "<br><input type='checkbox' name='";  
+          html += "<br><select name='";  
           html += pNames[n];
-          html += "' value=1";
+          html += "'>";
+          html += "<option value=0";
+          if (strcmp(str, "0")==0)
+            html += " selected";
+          html += ">No</option>";
+          html += "<option value=1";
           if (strcmp(str, "1")==0)
-            html += " checked";
-          html += ">";
+            html += " selected";
+          html += ">Yes</option>";
+          html += "</select>";
         }
         else
         {
@@ -452,40 +458,15 @@ void WiHomeComm::handleSaveAndRestartConfig()
   message += "\nArguments: ";
   message += config_webserver->args();
   message += "\n";
-  // TODO BEGIN - CLEANUP
-  // REVERSE FIRST LOOP STRUCTURE AND INTEGRATE SECOND IN FIRST
   for (uint8_t i=0; i<config_webserver->args(); i++)
   {
     message += " " + config_webserver->argName(i) + ": " + config_webserver->arg(i) + "\n";
     if (N_config_paras>0)
       for (int n=0; n<N_config_paras; n++)
-        // Argument name matches a config parameter and it is not bool (not a checkbox):
-        if (((config_webserver->argName(i)).compareTo(pNames[n])==0) && (tParas[n]!=TYPE_BOOL))
+        // Argument name matches a config parameter:
+        if ((config_webserver->argName(i)).compareTo(pNames[n])==0)
           update_config_parameter(n, (config_webserver->arg(i)).c_str());   
   }
-  // Boolean parameters checked seperately, because they won't show up in the webserver 
-  // arguments if the associated checkboxes are unchecked.
-  if (N_config_paras>0)
-      for (int n=0; n<N_config_paras; n++)
-        if (tParas[n]==TYPE_BOOL)
-        {
-          update_config_parameter(n, "0"); 
-          for (uint8_t i=0; i<config_webserver->args(); i++)
-            if ((config_webserver->argName(i)).compareTo(pNames[n])==0)
-              update_config_parameter(n, "1"); 
-        }
-  // TODO END - CLEANUP
-  Serial.println("--- Parameters begin ---");
-  if (N_config_paras>0)
-    for (int n=0; n<N_config_paras; n++)
-    {
-      char str[32];
-      get_config_parameter_string(str, n);
-      Serial.print(pNames[n]);
-      Serial.print(": ");
-      Serial.println(str);
-    }
-  Serial.println("--- Parameters end ---");
   SaveUserData();
   message += "Userdata saved.\n";
   Serial.println("Userdata saved.");
@@ -537,8 +518,7 @@ void WiHomeComm::handleRootMain()
     {
       if (N_config_paras>0)
         for (int n=0; n<N_config_paras; n++)
-          // if ((main_webserver->argName(i)).compareTo(pNames[n])==0)
-          if (((main_webserver->argName(i)).compareTo(pNames[n])==0) && (tParas[n]!=TYPE_BOOL))  
+          if ((main_webserver->argName(i)).compareTo(pNames[n])==0)  
             update_config_parameter(n, (main_webserver->arg(i)).c_str());   
     }
     SaveUserData();
@@ -760,10 +740,7 @@ void WiHomeComm::get_config_parameter_string(char* str, int n)
 
 void WiHomeComm::get_config_parameter_string_by_name(char* str, const char* pName)
 {
-  if (N_config_paras>0)
-    for (int n=0; n<N_config_paras; n++)
-      if (strcmp(pNames[n], pName)==0)
-        get_config_parameter_string(str, n);
+  get_config_parameter_string(str, parameter_index_by_name(pName));
 }
 
 unsigned int WiHomeComm::parameter_index_by_name(const char* pName)

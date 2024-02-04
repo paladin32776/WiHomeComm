@@ -29,12 +29,12 @@
 #define WIHOMECOMM_DISCONNECTED 3
 #define WIHOMECOMM_SOFTAP 4
 
-const char html_config_form_begin[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>"};
+const char html_config_form_begin[] = {"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'></head><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>"};
 const char html_config_form_end[] = {"<br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
-const char html_main_begin[] = {"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'></head><body style='font-family:verdana;'><h2 style='font-family:verdana;'>WiHome Main Page</h2>"};
+const char html_main_begin[] = {"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'></head><body style='font-family:verdana;'><h2 style='font-family:verdana;'>WiHome HKfan</h2>"};
 const char html_main_form_begin[] = {"<form action='/' style='font-family:verdana;'>"};
-const char html_main_form_end[] = {"<br><input type='submit' name='submit' value='save'><input type='submit' name='submit' value='reload'></form> </body></html>"};
+const char html_main_form_end[] = {"<br><br><input type='submit' name='submit' value='save'><input type='submit' name='submit' value='reload'></form> </body></html>"};
 
 class WiHomeComm
 {
