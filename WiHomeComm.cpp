@@ -1,6 +1,6 @@
 // Class to handle Wifi communication
 // for WiHome devices
-// Author: Gernot Fattinger (2019-2020)
+// Author: Gernot Fattinger (2019-2024)
 
 #include "WiHomeComm.h"
 
@@ -26,9 +26,25 @@ void WiHomeComm::init(bool _wihome_protocol, bool _connect_wifi)
   connect_wifi = _connect_wifi;
   Serial.printf("WiHomeComm initializing ...\n");
   config = new ConfigFileJSON("wihome.cfg");
-  Serial.printf("Loading user data from SPIFFS file:\n");
-  LoadUserData();
-  Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
+  add_config_parameter(ssid, "ssid","SSID");
+  secure_parameter("ssid");
+  add_config_parameter(password, "password","Password");
+  secure_parameter("password");
+  add_config_parameter(client, "client","Client Name");
+  secure_parameter("client");
+  add_config_parameter(&homekit_reset, "homekit_reset","Homekit Reset");
+  secure_parameter("homekit_reset");
+  if (config->is_valid_file())
+  {
+    Serial.printf("Loading user data from SPIFFS file:\n");
+    LoadUserData();
+    Serial.printf("SSID: %s, password: %s, client: %s\n",ssid,password,client);
+  }
+  else
+  {
+    wihome_protocol = false;
+    connect_wifi = false;
+  }
   strcpy(ssid_softAP, "WiHome_SoftAP");
   hubip = IPAddress(0,0,0,0);
   etp_Wifi = new EnoughTimePassed(WIHOMECOMM_WAITFOR_CONNECT_INTERVAL);
@@ -167,6 +183,7 @@ void WiHomeComm::check(DynamicJsonDocument& doc)
 
 bool WiHomeComm::ConnectStation()
 {
+  //Serial.printf("CSTATE=%d\n", connect_state);
   switch (connect_state)
   {
     case WH_INIT:
@@ -221,12 +238,14 @@ bool WiHomeComm::ConnectStation()
       connect_state = WH_STOP_STA;
       break;
     case WH_STOP_STA:
+      Serial.println("WH_STOP_STA");
       WiFi.setAutoReconnect(false);
       WiFi.disconnect(true);
       if (!WiFi.isConnected() && WiFi.getMode() == WIFI_OFF)
         connect_state = WH_START_STA; // everything should be disconnected and turned off at this point
       else
         connect_state = WH_ERROR;
+      Serial.println("WH_STOP_STA end");
       break;
     case WH_START_STA:
       if (connect_wifi)
@@ -347,42 +366,38 @@ void WiHomeComm::ConnectSoftAP()
     else
       handleClientConfig();
   }
-
 }
 
-void WiHomeComm::LoadUserData()
+void WiHomeComm::AddFormItems(String &html, bool show_secure)
 {
-  config->get("ssid", ssid, "password", password, "client", client, "homekit_reset", &homekit_reset);
   if (N_config_paras>0)
-      for (int n=0; n<N_config_paras; n++)
+    for (int n=0; n<N_config_paras; n++)
+    {
+      if (show_secure || (hParas[n]==false))
       {
-        switch(tParas[n])
+        char str[32];
+        get_config_parameter_string(str, n);
+        html += "<br>";
+        html += pPrompts[n];
+        if (tParas[n]==TYPE_BOOL)
         {
-          case TYPE_CSTR:
-            config->get(pNames[n], (char*) pParas[n]);
-          case TYPE_FLOAT:
-            config->get(pNames[n], (float*) pParas[n]);
+          html += "<br><input type='checkbox' name='";  
+          html += pNames[n];
+          html += "' value=1";
+          if (strcmp(str, "1")==0)
+            html += " checked";
+          html += ">";
+        }
+        else
+        {
+          html += "<br><input type='text' name='";
+          html += pNames[n];
+          html += "' value='";
+          html += str;
+          html += "'>";
         }
       }
-  config->dump();
-}
-
-void WiHomeComm::SaveUserData()
-{
-  config->set_nowrite("ssid", ssid, "password", password, "client", client, "homekit_reset", homekit_reset);
-    if (N_config_paras>0)
-      for (int n=0; n<N_config_paras; n++)
-      {
-        switch(tParas[n])
-        {
-          case TYPE_CSTR:
-            config->set_nowrite(pNames[n], (char*) pParas[n]);
-          case TYPE_FLOAT:
-            config->set_nowrite(pNames[n], *((float*) pParas[n]));
-        }
-      }
-  config->set("dummy", 0);
-  config->dump();
+    }
 }
 
 void WiHomeComm::CreateConfigWebServer(int port)
@@ -421,24 +436,7 @@ void WiHomeComm::handleRootConfig()
 {
   LoadUserData();
   String html = html_config_form_begin;
-  html += html_config_form1;
-  html += ssid;
-  html += html_config_form2;
-  html += password;
-  html += html_config_form3;
-  html += client;
-  if (N_config_paras>0)
-    for (int n=0; n<N_config_paras; n++)
-    {
-      char str[32];
-      get_config_parameter_string(str, n);
-      html += "'><br>";
-      html += pPrompts[n];
-      html += "<br><input type='text' name='";
-      html += pNames[n];
-      html += "' value='";
-      html += str;
-    }
+  AddFormItems(html, true);
   html += html_config_form_end;
     config_webserver->send(200, "text/html", html);
 }
@@ -454,29 +452,30 @@ void WiHomeComm::handleSaveAndRestartConfig()
   message += "\nArguments: ";
   message += config_webserver->args();
   message += "\n";
+  // TODO BEGIN - CLEANUP
+  // REVERSE FIRST LOOP STRUCTURE AND INTEGRATE SECOND IN FIRST
   for (uint8_t i=0; i<config_webserver->args(); i++)
   {
     message += " " + config_webserver->argName(i) + ": " + config_webserver->arg(i) + "\n";
-    if ((config_webserver->argName(i)).compareTo("ssid")==0)
-      strcpy(ssid, (config_webserver->arg(i)).c_str());
-    if ((config_webserver->argName(i)).compareTo("password")==0)
-      strcpy(password, (config_webserver->arg(i)).c_str());
-    if ((config_webserver->argName(i)).compareTo("client")==0)
-      strcpy(client, (config_webserver->arg(i)).c_str());
-    if ((config_webserver->argName(i)).compareTo("homekit_reset")==0)
-      homekit_reset = true;
     if (N_config_paras>0)
       for (int n=0; n<N_config_paras; n++)
-        if ((config_webserver->argName(i)).compareTo(pNames[n])==0)
+        // Argument name matches a config parameter and it is not bool (not a checkbox):
+        if (((config_webserver->argName(i)).compareTo(pNames[n])==0) && (tParas[n]!=TYPE_BOOL))
           update_config_parameter(n, (config_webserver->arg(i)).c_str());   
   }
-  Serial.println("--- Data to be saved begin ---");
-  Serial.println(ssid);
-  Serial.println(password);
-  Serial.println(client);
-  Serial.println(homekit_reset);
-  Serial.println("--- Data to be saved end ---");
-  Serial.println("--- Additional parameters begin ---");
+  // Boolean parameters checked seperately, because they won't show up in the webserver 
+  // arguments if the associated checkboxes are unchecked.
+  if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+        if (tParas[n]==TYPE_BOOL)
+        {
+          update_config_parameter(n, "0"); 
+          for (uint8_t i=0; i<config_webserver->args(); i++)
+            if ((config_webserver->argName(i)).compareTo(pNames[n])==0)
+              update_config_parameter(n, "1"); 
+        }
+  // TODO END - CLEANUP
+  Serial.println("--- Parameters begin ---");
   if (N_config_paras>0)
     for (int n=0; n<N_config_paras; n++)
     {
@@ -486,7 +485,7 @@ void WiHomeComm::handleSaveAndRestartConfig()
       Serial.print(": ");
       Serial.println(str);
     }
-  Serial.println("--- Additional parameters end ---");    
+  Serial.println("--- Parameters end ---");
   SaveUserData();
   message += "Userdata saved.\n";
   Serial.println("Userdata saved.");
@@ -538,7 +537,8 @@ void WiHomeComm::handleRootMain()
     {
       if (N_config_paras>0)
         for (int n=0; n<N_config_paras; n++)
-          if ((main_webserver->argName(i)).compareTo(pNames[n])==0)
+          // if ((main_webserver->argName(i)).compareTo(pNames[n])==0)
+          if (((main_webserver->argName(i)).compareTo(pNames[n])==0) && (tParas[n]!=TYPE_BOOL))  
             update_config_parameter(n, (main_webserver->arg(i)).c_str());   
     }
     SaveUserData();
@@ -553,19 +553,7 @@ void WiHomeComm::handleRootMain()
   if (main_html)
     html += (*main_html);
   html += html_main_form_begin;
-  if (N_config_paras>0)
-    for (int n=0; n<N_config_paras; n++)
-    {
-      char str[32];
-      get_config_parameter_string(str, n);
-      html += "<br>";
-      html += pPrompts[n];
-      html += "<br><input type='text' name='";
-      html += pNames[n];
-      html += "' value='";
-      html += str;
-      html += "'>";
-    }
+  AddFormItems(html);
   html += html_main_form_end;
     main_webserver->send(200, "text/html", html);
 }
@@ -660,12 +648,62 @@ bool WiHomeComm::is_homekit_reset()
   return _homekit_reset;
 }
 
+void WiHomeComm::LoadUserData()
+{
+  // config->get("homekit_reset", &homekit_reset);
+  if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+      {
+        switch(tParas[n])
+        {
+          case TYPE_CSTR:
+            config->get(pNames[n], (char*) pParas[n]);
+            break;
+          case TYPE_FLOAT:
+            config->get(pNames[n], (float*) pParas[n]);
+            break;
+          case TYPE_BOOL:
+            config->get(pNames[n], (bool*) pParas[n]);
+            break;
+        }
+      }
+  config->dump();
+}
+
+void WiHomeComm::SaveUserData()
+{
+  // config->set_nowrite("homekit_reset", homekit_reset);
+    if (N_config_paras>0)
+      for (int n=0; n<N_config_paras; n++)
+      {
+        char str[32];
+        Serial.print("Para: ");
+        get_config_parameter_string(str, n);
+        Serial.println(str);
+        switch(tParas[n])
+        {
+          case TYPE_CSTR:
+            config->set_nowrite(pNames[n], (char*) pParas[n]);
+            break;
+          case TYPE_FLOAT:
+            config->set_nowrite(pNames[n], *((float*) pParas[n]));
+            break;
+          case TYPE_BOOL:
+            config->set_nowrite(pNames[n], *((bool*) pParas[n]));
+            break;
+        }
+      }
+  config->set("dummy", 0);
+  config->dump();
+}
+
 void WiHomeComm::add_config_parameter(void* pPara, const char* pName, const char* pPrompt, datatypes tPara)
 {
   pParas[N_config_paras] = pPara;
   pPrompts[N_config_paras] = pPrompt;
   tParas[N_config_paras] = tPara;
   pNames[N_config_paras] = pName;
+  hParas[N_config_paras] = false;
   N_config_paras++;
   LoadUserData();
 }
@@ -680,6 +718,11 @@ void WiHomeComm::add_config_parameter(float* pPara, const char* pName, const cha
   add_config_parameter((void*)pPara, pName, pPrompt, TYPE_FLOAT);
 }
 
+void WiHomeComm::add_config_parameter(bool* pPara, const char* pName, const char* pPrompt)
+{
+  add_config_parameter((void*)pPara, pName, pPrompt, TYPE_BOOL);
+}
+
 void WiHomeComm::update_config_parameter(int n, const char* value)
 {
   switch (tParas[n])
@@ -689,6 +732,9 @@ void WiHomeComm::update_config_parameter(int n, const char* value)
       break;
     case TYPE_FLOAT:
       *((float*) pParas[n]) = String(value).toFloat();
+      break;
+    case TYPE_BOOL:
+      *((bool*) pParas[n]) = (String(value).toFloat()!=0);
       break;
   }
 }
@@ -703,7 +749,37 @@ void WiHomeComm::get_config_parameter_string(char* str, int n)
     case TYPE_FLOAT:
       dtostrf(*((float*) pParas[n]), 10, 7, str);
       break;
+    case TYPE_BOOL:
+      if (*((bool*) pParas[n]))
+        strcpy(str,"1");
+      else
+        strcpy(str,"0");
+      break;
   }
+}
+
+void WiHomeComm::get_config_parameter_string_by_name(char* str, const char* pName)
+{
+  if (N_config_paras>0)
+    for (int n=0; n<N_config_paras; n++)
+      if (strcmp(pNames[n], pName)==0)
+        get_config_parameter_string(str, n);
+}
+
+unsigned int WiHomeComm::parameter_index_by_name(const char* pName)
+{
+  if (N_config_paras>0)
+    for (int n=0; n<N_config_paras; n++)
+      if (strcmp(pNames[n], pName)==0)
+        return n;
+  return N_config_paras; // not found
+}
+
+void WiHomeComm::secure_parameter(const char* pName)
+{
+  unsigned int n = parameter_index_by_name(pName);
+  if (n<N_config_paras)
+    hParas[n] = true;
 }
 
 void WiHomeComm::attach_html(String* _main_html)

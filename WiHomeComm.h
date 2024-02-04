@@ -30,10 +30,7 @@
 #define WIHOMECOMM_SOFTAP 4
 
 const char html_config_form_begin[] = {"<!DOCTYPE html><html><body><h2 style='font-family:verdana;'>WiHome Setup</h2><form action='/save_and_restart.php' style='font-family:verdana;'>"};
-const char html_config_form1[] = {"SSID:<br>  <input type='text' name='ssid' value='"};
-const char html_config_form2[] = {"'><br>Password:<br>  <input type='text' name='password' value='"};
-const char html_config_form3[] = {"'><br>Client Name:<br>  <input type='text' name='client' value='"};
-const char html_config_form_end[] = {"'><br>Homekit Reset:<br> <input type='checkbox' name='homekit_reset' value=1><br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
+const char html_config_form_end[] = {"<br>  <input type='submit' value='Save and Connect'></form> </body></html>"};
 
 const char html_main_begin[] = {"<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width'></head><body style='font-family:verdana;'><h2 style='font-family:verdana;'>WiHome Main Page</h2>"};
 const char html_main_form_begin[] = {"<form action='/' style='font-family:verdana;'>"};
@@ -42,6 +39,7 @@ const char html_main_form_end[] = {"<br><input type='submit' name='submit' value
 class WiHomeComm
 {
   private:
+    bool testbool = true;
     // UserData variables and configuration
     char ssid[32];
     char password[32];
@@ -69,18 +67,18 @@ class WiHomeComm
     bool needMDNS = true;
     enum WIHOME_STATES
     {
-      WH_INIT,
-      WH_STOP_SOFTAP,
-      WH_STOP_MDNS,
-      WH_STOP_UDP,
-      WH_STOP_STA,
-      WH_START_STA,
-      WH_WAITFOR_STA,
-      WH_START_MDNS,
-      WH_START_OTA,
-      WH_START_UDP,
-      WH_CONNECTED,
-      WH_NO_WIFI,
+      WH_INIT,        // 0
+      WH_STOP_SOFTAP, // 1
+      WH_STOP_MDNS,   // 2
+      WH_STOP_UDP,    // 3
+      WH_STOP_STA,    // 4
+      WH_START_STA,   // 5
+      WH_WAITFOR_STA, // 6
+      WH_START_MDNS,  // 7
+      WH_START_OTA,   // 8
+      WH_START_UDP,   // 9
+      WH_CONNECTED,   // 10
+      WH_NO_WIFI,     // 11
       WH_ERROR = 255,
     };
     enum WIHOME_STATES connect_state = WH_INIT;
@@ -100,6 +98,8 @@ class WiHomeComm
     void ConnectSoftAP();
     void LoadUserData();
     void SaveUserData();
+    // Methods for common code between Config and Main web server:
+    void AddFormItems(String &html, bool show_secure=false);
     // Config web server for SoftAP mode:
     void CreateConfigWebServer(int port);
     void DestroyConfigWebServer();
@@ -146,6 +146,9 @@ class WiHomeComm
     } tParas[16]; // Storage for datatypes of up to 16 parameters
     const char* pPrompts[16]; // Storage for up to 16 pointers to prompts for additional parameters
     const char* pNames[16]; // Storage for up to 16 pointers to names of additional parameters
+    bool hParas[16]; // Storage for indicating hidden (on the main web page) parameters
+    // Functions to handle config parameters:
+    unsigned int parameter_index_by_name(const char* pName);
     // Pointer to html string to display on main web server page:
     String* main_html;
   public:
@@ -177,8 +180,11 @@ class WiHomeComm
     void add_config_parameter(void* pPara, const char* pName, const char* pPrompt, datatypes tPara);
     void add_config_parameter(char* pPara, const char* pName, const char* pPrompt);
     void add_config_parameter(float* pPara, const char* pName, const char* pPrompt);
+    void add_config_parameter(bool* pPara, const char* pName, const char* pPrompt);
     void update_config_parameter(int n, const char* value);
     void get_config_parameter_string(char* str, int n);
+    void get_config_parameter_string_by_name(char* str, const char* pName);
+    void secure_parameter(const char* pName);
     // Methods to handle external html content for main web page:
     void attach_html(String* _main_html);
     void detach_html();
